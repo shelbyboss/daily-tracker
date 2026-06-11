@@ -28,16 +28,33 @@ const PAGE_IDS = {
   "2026-06-30": "37c35d7f-367d-81be-a203-e64bb1362cd6",
 };
 
+const WALK_TARGET = 8000;
+
 const SECTIONS = [
-  { id: "move", icon: "🔥", name: "Move", color: "#ff6b35", items: [{ id: "Walk 8k 👟", label: "เดินวันละ >8,000 ก้าว" }, { id: "Sleep 6h 😴", label: "นอน >6 ชม." }] },
-  { id: "fuel", icon: "⚡", name: "Fuel", color: "#f7c948", items: [{ id: "Water 2L 💧", label: "ดื่มน้ำ 2 ลิตร" }, { id: "Egg 🥚", label: "กินไข่ 2 ฟอง" }] },
-  { id: "connect", icon: "🌐", name: "Connect", color: "#4ecdc4", items: [{ id: "Line Friends 💬", label: "คุยไลน์เล่นกับเพื่อนๆ" }, { id: "Hangout 🤝", label: "ทำกิจกรรมกับเพื่อน" }, { id: "Event 🎉", label: "เข้าร่วม event/กิจกรรมใหม่" }] },
-  { id: "grow", icon: "🧠", name: "Grow", color: "#a78bfa", items: [{ id: "Podcast 🎧", label: "ฟัง Podcast" }, { id: "Bujo 📓", label: "บันทึก Bujo" }] },
-  { id: "create", icon: "🎨", name: "Create", color: "#f472b6", items: [{ id: "Idea Content 💡", label: "จด idea content" }, { id: "Make Content ✂️", label: "ตัด/ทำ content" }] },
+  { id: "move", icon: "🔥", name: "Move", color: "#ff6b35", items: [
+    { id: "Sleep 6h 😴", label: "นอน >6 ชม." }
+  ]},
+  { id: "fuel", icon: "⚡", name: "Fuel", color: "#f7c948", items: [
+    { id: "Water 2L 💧", label: "ดื่มน้ำ 2 ลิตร" },
+    { id: "Egg 🥚", label: "กินไข่ 2 ฟอง" }
+  ]},
+  { id: "connect", icon: "🌐", name: "Connect", color: "#4ecdc4", items: [
+    { id: "Line Friends 💬", label: "คุยไลน์เล่นกับเพื่อนๆ" },
+    { id: "Hangout 🤝", label: "ทำกิจกรรมกับเพื่อน" },
+    { id: "Event 🎉", label: "เข้าร่วม event/กิจกรรมใหม่" }
+  ]},
+  { id: "grow", icon: "🧠", name: "Grow", color: "#a78bfa", items: [
+    { id: "Podcast 🎧", label: "ฟัง Podcast" },
+    { id: "Bujo 📓", label: "บันทึก Bujo" }
+  ]},
+  { id: "create", icon: "🎨", name: "Create", color: "#f472b6", items: [
+    { id: "Idea Content 💡", label: "จด idea content" },
+    { id: "Make Content ✂️", label: "ตัด/ทำ content" }
+  ]},
 ];
 
 const ALL_ITEMS = SECTIONS.flatMap(s => s.items);
-const TOTAL = ALL_ITEMS.length;
+const TOTAL = ALL_ITEMS.length + 1; // +1 for walk
 const DAY_SHORT = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 function getTodayStr() { return new Date().toISOString().slice(0, 10); }
@@ -65,12 +82,17 @@ export default function App() {
   const weekDates = getWeekDates();
   const [selected, setSelected] = useState(today);
   const [checks, setChecks] = useState({});
+  const [walkSteps, setWalkSteps] = useState({});
   const [income, setIncome] = useState("");
   const [expense, setExpense] = useState("");
   const [status, setStatus] = useState(null);
 
   const dayChecks = checks[selected] || {};
-  const score = ALL_ITEMS.filter(item => dayChecks[item.id]).length;
+  const steps = walkSteps[selected] || "";
+  const walkScore = steps ? Math.min(1, parseInt(steps) / WALK_TARGET) : 0;
+  const checkScore = ALL_ITEMS.filter(item => dayChecks[item.id]).length;
+  const score = (walkScore + checkScore).toFixed(1);
+  const scoreDisplay = parseFloat(score);
 
   const toggle = (itemId) => {
     setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], [itemId]: !prev[selected]?.[itemId] } }));
@@ -79,7 +101,8 @@ export default function App() {
 
   const getDayScore = (date) => {
     const d = checks[date] || {};
-    return ALL_ITEMS.filter(item => d[item.id]).length;
+    const w = walkSteps[date] ? Math.min(1, parseInt(walkSteps[date]) / WALK_TARGET) : 0;
+    return w + ALL_ITEMS.filter(item => d[item.id]).length;
   };
 
   const submit = async () => {
@@ -92,6 +115,10 @@ export default function App() {
       ALL_ITEMS.forEach(item => {
         properties[item.id] = { checkbox: !!dayChecks[item.id] };
       });
+      // Walk as checkbox based on target
+      properties["Walk 8k 👟"] = { checkbox: steps ? parseInt(steps) >= WALK_TARGET : false };
+      // Store actual steps in Daily Score
+      if (steps) properties["Daily Score"] = { number: parseInt(steps) };
       if (income) properties["รายรับ 💰"] = { number: parseFloat(income) };
       if (expense) properties["รายจ่าย 💸"] = { number: parseFloat(expense) };
 
@@ -108,16 +135,19 @@ export default function App() {
 
   return (
     <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
+      
+      {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 20 }}>
         <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>DAILY TRACKER</div>
         <div style={{ fontSize: 22, fontWeight: 700 }}>{getThaiDate(selected)}</div>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: "#17171f", borderRadius: 99, padding: "4px 14px", border: "1px solid #2a2a36" }}>
           <span style={{ fontSize: 13, color: "#6b6b80" }}>Score</span>
-          <span style={{ fontSize: 18, fontWeight: 700 }}>{score}</span>
+          <span style={{ fontSize: 18, fontWeight: 700 }}>{scoreDisplay}</span>
           <span style={{ fontSize: 13, color: "#6b6b80" }}>/ {TOTAL}</span>
         </div>
       </div>
 
+      {/* Day Picker */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5, marginBottom: 20 }}>
         {weekDates.map((date) => {
           const d = new Date(date + "T00:00:00");
@@ -138,6 +168,45 @@ export default function App() {
         })}
       </div>
 
+      {/* Walk Steps Input */}
+      <div style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 16 }}>🔥</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#ff6b35" }}>Move</span>
+          </div>
+          <span style={{ fontSize: 11, color: "#6b6b80" }}>
+            {steps ? `${Math.round(walkScore * 100)}%` : "0%"} · {walkScore.toFixed(2)} คะแนน
+          </span>
+        </div>
+        <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
+        
+        {/* Walk input */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>👟 จำนวนก้าววันนี้</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <input
+              type="number"
+              value={steps}
+              onChange={e => { setWalkSteps(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }}
+              placeholder="0"
+              style={{ flex: 1, background: "#0e0e12", border: `1px solid ${steps && parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#2a2a36"}`, borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", boxSizing: "border-box" }}
+            />
+            <div style={{ fontSize: 12, color: "#6b6b80", flexShrink: 0 }}>/ {WALK_TARGET.toLocaleString()}</div>
+          </div>
+          {/* Progress bar */}
+          <div style={{ marginTop: 8, height: 4, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(100, walkScore * 100)}%`, background: "#ff6b35", borderRadius: 99, transition: "width 0.3s" }} />
+          </div>
+          {steps && (
+            <div style={{ marginTop: 4, fontSize: 11, color: parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#6b6b80" }}>
+              {parseInt(steps) >= WALK_TARGET ? "✅ ถึงเป้าแล้ว!" : `ขาดอีก ${(WALK_TARGET - parseInt(steps)).toLocaleString()} ก้าว`}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Other Sections */}
       {SECTIONS.map(sec => {
         const done = sec.items.filter(item => dayChecks[item.id]).length;
         return (
@@ -171,6 +240,7 @@ export default function App() {
         );
       })}
 
+      {/* Finance */}
       <div style={{ marginBottom: 20, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12, letterSpacing: 1, textTransform: "uppercase" }}>💰 การเงินวันนี้</div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -184,10 +254,11 @@ export default function App() {
         </div>
       </div>
 
+      {/* Submit */}
       <button onClick={submit} disabled={status === "loading"} style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: status === "success" ? "#4ecdc4" : status === "error" ? "#ff6b6b" : "#f0f0f5", color: "#0e0e12", fontSize: 15, fontWeight: 700, cursor: status === "loading" ? "not-allowed" : "pointer", transition: "all 0.3s", opacity: status === "loading" ? 0.7 : 1 }}>
         {status === "loading" ? "⏳ กำลังบันทึก..." : status === "success" ? "✅ บันทึกเข้า Notion แล้ว!" : status === "error" ? "❌ ลองอีกครั้ง" : "📤 Save to Notion"}
       </button>
-      {status === "success" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#6b6b80" }}>Score {score}/{TOTAL} · {getThaiDate(selected)} 🎉</div>}
+      {status === "success" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#6b6b80" }}>Score {scoreDisplay}/{TOTAL} · {getThaiDate(selected)} 🎉</div>}
       {status === "error" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#ff6b6b" }}>บันทึกไม่ได้ — ลองใหม่อีกครั้งครับ</div>}
     </div>
   );
