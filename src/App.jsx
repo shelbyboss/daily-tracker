@@ -94,6 +94,8 @@ export default function App() {
   const [meals, setMeals] = useState({}); // { date: [{name, calories, items}] }
   const [analyzingFood, setAnalyzingFood] = useState(false);
   const [foodError, setFoodError] = useState(null);
+  const [foodDesc, setFoodDesc] = useState("");
+  const [pendingFile, setPendingFile] = useState(null);
   const fileInputRef = useRef(null);
 
   const dayChecks = checks[selected] || {};
@@ -119,18 +121,15 @@ export default function App() {
     return w + sl + ALL_ITEMS.filter(item => d[item.id]).length;
   };
 
-  const analyzeFood = async (file) => {
+  const analyzeFood = async (file, desc) => {
     setAnalyzingFood(true);
     setFoodError(null);
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target.result.split(',')[1];
-        const mediaType = file.type;
+      const doAnalyze = async (imageBase64, mediaType) => {
         const res = await fetch('/api/analyze-food', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, mediaType }),
+          body: JSON.stringify({ imageBase64, mediaType, description: desc }),
         });
         const data = await res.json();
         if (res.ok) {
@@ -138,12 +137,23 @@ export default function App() {
             ...prev,
             [selected]: [...(prev[selected] || []), { ...data, time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) }]
           }));
+          setFoodDesc("");
+          setPendingFile(null);
         } else {
           setFoodError('วิเคราะห์ไม่ได้ ลองใหม่');
         }
         setAnalyzingFood(false);
       };
-      reader.readAsDataURL(file);
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          await doAnalyze(e.target.result.split(',')[1], file.type);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        await doAnalyze(null, null);
+      }
     } catch (e) {
       setFoodError('เกิดข้อผิดพลาด');
       setAnalyzingFood(false);
@@ -389,12 +399,25 @@ export default function App() {
 
                   {/* Upload button */}
                   <input ref={fileInputRef} type="file" accept="image/*"
-                    onChange={e => e.target.files[0] && analyzeFood(e.target.files[0])}
+                    onChange={e => { if (e.target.files[0]) setPendingFile(e.target.files[0]); }}
                     style={{ display: "none" }} />
-                  <button onClick={() => fileInputRef.current?.click()} disabled={analyzingFood}
-                    style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px dashed #f7c948", background: "transparent", color: "#f7c948", fontSize: 13, fontWeight: 700, cursor: analyzingFood ? "not-allowed" : "pointer", opacity: analyzingFood ? 0.6 : 1 }}>
-                    {analyzingFood ? "⏳ กำลังวิเคราะห์..." : "📸 ถ่ายรูปอาหาร / อัพโหลด"}
-                  </button>
+
+                  {/* Description input */}
+                  <input type="text" value={foodDesc}
+                    onChange={e => setFoodDesc(e.target.value)}
+                    placeholder="รายละเอียดเพิ่มเติม เช่น ข้าวผัดกะเพรา 1 จาน..."
+                    style={{ width: "100%", background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => fileInputRef.current?.click()} disabled={analyzingFood}
+                      style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px dashed #f7c948", background: pendingFile ? "rgba(247,201,72,0.1)" : "transparent", color: "#f7c948", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      {pendingFile ? `📷 ${pendingFile.name.slice(0, 15)}...` : "📸 เลือกรูป"}
+                    </button>
+                    <button onClick={() => analyzeFood(pendingFile, foodDesc)} disabled={analyzingFood || (!pendingFile && !foodDesc)}
+                      style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: (pendingFile || foodDesc) ? "#f7c948" : "#2a2a36", color: "#0e0e12", fontSize: 12, fontWeight: 700, cursor: (pendingFile || foodDesc) ? "pointer" : "not-allowed", opacity: analyzingFood ? 0.6 : 1 }}>
+                      {analyzingFood ? "⏳ วิเคราะห์..." : "🔍 วิเคราะห์แคล"}
+                    </button>
+                  </div>
                   {foodError && <div style={{ marginTop: 6, fontSize: 11, color: "#ff6b6b", textAlign: "center" }}>{foodError}</div>}
                 </div>
               )}
