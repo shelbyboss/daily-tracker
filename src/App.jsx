@@ -148,14 +148,12 @@ export default function App() {
       .catch(() => setLoading(false));
   }, []);
 
-  const dayChecks = checks[selected] || {};
+const dayChecks = checks[selected] || {};
   const steps = walkSteps[selected] || "";
-  const sleep = sleepHours[selected] || "";
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
   const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
   const isWorkoutToday = workoutDone[selected] || false;
-
   // Scoring
   const walkScore = steps ? Math.min(0.5, parseInt(steps) / WALK_TARGET * 0.5) : 0;
   const sleepScore = sleep ? Math.min(0.5, parseFloat(sleep) / SLEEP_TARGET * 0.5) : 0;
