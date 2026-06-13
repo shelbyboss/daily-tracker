@@ -108,7 +108,9 @@ export default function App() {
   const [workoutLog, setWorkoutLog] = useState({}); // { date: { exerciseName: [{sets, reps, kg}] } }
   const [customExercise, setCustomExercise] = useState("");
   const [customExercises, setCustomExercises] = useState({});
-  const BODY_WEIGHT = 70;
+  const [bodyWeight, setBodyWeight] = useState(() => parseFloat(localStorage.getItem("bodyWeight") || "62"));
+  const [showSettings, setShowSettings] = useState(false);
+  const [workoutMinutes, setWorkoutMinutes] = useState({});
 
   const [loading, setLoading] = useState(true);
 
@@ -148,12 +150,12 @@ export default function App() {
       .catch(() => setLoading(false));
   }, []);
 
-const dayChecks = checks[selected] || {};
-  const steps = walkSteps[selected] || "";
+  const dayChecks = checks[selected] || {};
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
   const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
   const isWorkoutToday = workoutDone[selected] || false;
+
   // Scoring
   const walkScore = steps ? Math.min(0.5, parseInt(steps) / WALK_TARGET * 0.5) : 0;
   const sleepScore = sleep ? Math.min(0.5, parseFloat(sleep) / SLEEP_TARGET * 0.5) : 0;
@@ -253,20 +255,11 @@ const dayChecks = checks[selected] || {};
     return null;
   };
 
-  // Estimate calories burned from workout
+  // Estimate calories burned using MET formula
   const calcWorkoutCalories = (date) => {
-    const log = workoutLog[date] || {};
-    let total = 0;
-    Object.entries(log).forEach(([ex, sets]) => {
-      sets.forEach(set => {
-        const reps = parseInt(set.reps) || 0;
-        const kg = parseFloat(set.kg) || BODY_WEIGHT * 0.3;
-        const setsNum = parseInt(set.sets) || 1;
-        // Rough estimate: 0.1 cal per rep per kg
-        total += reps * setsNum * kg * 0.1;
-      });
-    });
-    return Math.round(total);
+    const minutes = workoutMinutes[date] || 0;
+    if (!minutes) return 0;
+    return Math.round(5 * bodyWeight * (minutes / 60));
   };
 
   const submit = async () => {
@@ -302,9 +295,41 @@ const dayChecks = checks[selected] || {};
 
     return (
       <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <div style={{ textAlign: "center", marginBottom: 20, position: "relative" }}>
           <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>WORKOUT</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{getThaiDate(selected)}</div>
+          <div onClick={() => setShowSettings(!showSettings)} style={{ position: "absolute", right: 0, top: 0, fontSize: 20, cursor: "pointer" }}>⚙️</div>
+        </div>
+
+        {/* Settings popup */}
+        {showSettings && (
+          <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>⚙️ ตั้งค่า</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, color: "#6b6b80", flexShrink: 0 }}>น้ำหนักตัว (kg)</span>
+              <input type="number" value={bodyWeight}
+                onChange={e => { const v = parseFloat(e.target.value); if (v > 0) { setBodyWeight(v); localStorage.setItem("bodyWeight", v); } }}
+                style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
+              <span style={{ fontSize: 13, color: "#6b6b80" }}>kg</span>
+            </div>
+          </div>
+        )}
+
+        {/* Workout duration */}
+        <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: "#6b6b80" }}>⏱️ เวลา workout วันนี้</span>
+            <input type="number" value={workoutMinutes[selected] || ""}
+              onChange={e => setWorkoutMinutes(prev => ({ ...prev, [selected]: parseInt(e.target.value) || 0 }))}
+              placeholder="0"
+              style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
+            <span style={{ fontSize: 13, color: "#6b6b80" }}>นาที</span>
+          </div>
+          {workoutMinutes[selected] > 0 && (
+            <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b35", textAlign: "center" }}>
+              🔥 เผาผลาญประมาณ {calcWorkoutCalories(selected)} kcal
+            </div>
+          )}
         </div>
 
         {!selectedGroup ? (
@@ -504,7 +529,8 @@ const dayChecks = checks[selected] || {};
 
   return (
     <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: 20 }}>
+      <div style={{ textAlign: "center", marginBottom: 20, position: "relative" }}>
+        <div onClick={() => setShowSettings(!showSettings)} style={{ position: "absolute", right: 0, top: 0, fontSize: 18, cursor: "pointer" }}>⚙️</div>
         <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>DAILY TRACKER</div>
         <div style={{ fontSize: 22, fontWeight: 700 }}>{getThaiDate(selected)}</div>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: "#17171f", borderRadius: 99, padding: "4px 14px", border: "1px solid #2a2a36" }}>
@@ -513,6 +539,21 @@ const dayChecks = checks[selected] || {};
           <span style={{ fontSize: 13, color: "#6b6b80" }}>/ {TOTAL}</span>
         </div>
       </div>
+
+      {/* Settings popup */}
+      {showSettings && (
+        <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>⚙️ ตั้งค่า</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: "#6b6b80", flexShrink: 0 }}>น้ำหนักตัว</span>
+            <input type="number" value={bodyWeight}
+              onChange={e => { const v = parseFloat(e.target.value); if (v > 0) { setBodyWeight(v); localStorage.setItem("bodyWeight", v); } }}
+              style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
+            <span style={{ fontSize: 13, color: "#6b6b80" }}>kg</span>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, color: "#6b6b80", textAlign: "center" }}>BMI: {(bodyWeight / (1.70 * 1.70)).toFixed(1)}</div>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5, marginBottom: 20 }}>
         {weekDates.map((date) => {
