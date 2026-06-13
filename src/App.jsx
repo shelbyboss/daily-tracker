@@ -405,7 +405,7 @@ export default function App() {
                         </div>
                       </div>
                       {meal.items?.map((item, j) => (
-                        <div key={j} style={{ fontSize: 12, color: "#6b6b80" }}>{item.name} · {{item.calories} kcal · 🥩 {item.protein || 0}g</div>
+                     <div key={j} style={{ fontSize: 12, color: "#6b6b80" }}>{item.name} · {item.calories} kcal · 🥩 {item.protein || 0}g</div>
                       ))}
                     </div>
                   ))}
