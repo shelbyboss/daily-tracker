@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         sorts: [{ property: 'Date', direction: 'ascending' }],
-        page_size: 30,
+        page_size: 31,
       }),
     });
     const data = await response.json();
@@ -27,6 +27,7 @@ export default async function handler(req, res) {
       const p = page.properties;
       const getCheck = (key) => p[key]?.checkbox || false;
       const getNum = (key) => p[key]?.number || 0;
+      const getText = (key) => p[key]?.rich_text?.[0]?.text?.content || p[key]?.text?.[0]?.text?.content || '';
       const getDate = () => p['Date']?.date?.start || '';
       return {
         date: getDate(),
@@ -34,6 +35,7 @@ export default async function handler(req, res) {
         sleep: getCheck('Sleep 6h 😴'),
         water: getCheck('Water 2L 💧'),
         egg: getCheck('Egg 🥚'),
+        workout: getCheck('Workout 💪'),
         line: getCheck('Line Friends 💬'),
         hangout: getCheck('Hangout 🤝'),
         event: getCheck('Event 🎉'),
@@ -41,9 +43,11 @@ export default async function handler(req, res) {
         bujo: getCheck('Bujo 📓'),
         idea: getCheck('Idea Content 💡'),
         make: getCheck('Make Content ✂️'),
-        score: getNum('Score 🏆'),
+        dailyScore: getNum('Daily Score'),
+        calories: getNum('แคลอรี่ 🔥'),
         income: getNum('รายรับ 💰'),
         expense: getNum('รายจ่าย 💸'),
+        workoutLog: getText('Workout Log 📝'),
       };
     });
 
