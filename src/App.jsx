@@ -37,7 +37,7 @@ const WORKOUT_GROUPS = [
   { id: "shoulder", icon: "🔱", name: "ไหล่", color: "#a78bfa", exercises: ["Shoulder Press", "Lateral Raise", "Front Raise", "Face Pull", "Shrug"] },
   { id: "leg", icon: "🦵", name: "ขา", color: "#f7c948", exercises: ["Squat", "Leg Press", "Leg Curl", "Leg Extension", "Calf Raise"] },
   { id: "core", icon: "⚡", name: "Core", color: "#f472b6", exercises: ["Plank", "Crunch", "Leg Raise", "Russian Twist", "Cable Crunch"] },
-  { id: "cardio", icon: "🏃", name: "Cardio", color: "#4ecdc4", exercises: ["วิ่ง", "ปั่นจักรยาน", "ว่ายน้ำ", "Rowing", "Jump Rope"] },
+  { id: "cardio", icon: "🏃", name: "Cardio", color: "#4ecdc4", exercises: [], isCardio: true },
 ];
 
 const SECTIONS = [
@@ -111,6 +111,7 @@ export default function App() {
   const [bodyWeight, setBodyWeight] = useState(() => parseFloat(localStorage.getItem("bodyWeight") || "62"));
   const [showSettings, setShowSettings] = useState(false);
   const [workoutMinutes, setWorkoutMinutes] = useState({});
+  const [cardioMinutes, setCardioMinutes] = useState({});
 
   const [loading, setLoading] = useState(true);
 
@@ -151,8 +152,7 @@ export default function App() {
   }, []);
 
   const dayChecks = checks[selected] || {};
-const steps = walkSteps[selected] || "";
-
+  const steps = walkSteps[selected] || "";
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
   const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
@@ -259,9 +259,11 @@ const steps = walkSteps[selected] || "";
 
   // Estimate calories burned using MET formula
   const calcWorkoutCalories = (date) => {
-    const minutes = workoutMinutes[date] || 0;
-    if (!minutes) return 0;
-    return Math.round(5 * bodyWeight * (minutes / 60));
+    const weightMin = workoutMinutes[date] || 0;
+    const cardioMin = cardioMinutes[date] || 0;
+    const weightCal = weightMin > 0 ? Math.round(5 * bodyWeight * (weightMin / 60)) : 0;
+    const cardioCal = cardioMin > 0 ? Math.round(8 * bodyWeight * (cardioMin / 60)) : 0;
+    return { weight: weightCal, cardio: cardioCal, total: weightCal + cardioCal };
   };
 
   const submit = async () => {
@@ -329,10 +331,41 @@ const steps = walkSteps[selected] || "";
           </div>
           {workoutMinutes[selected] > 0 && (
             <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b35", textAlign: "center" }}>
-              🔥 เผาผลาญประมาณ {calcWorkoutCalories(selected)} kcal
+              🔥 เผาผลาญประมาณ {calcWorkoutCalories(selected).weight} kcal
             </div>
           )}
         </div>
+
+        {/* Cardio special UI */}
+        {selectedGroup?.isCardio && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <button onClick={() => setSelectedGroup(null)} style={{ background: "#17171f", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", cursor: "pointer", fontSize: 13 }}>← กลับ</button>
+              <span style={{ fontSize: 18, fontWeight: 700, color: "#4ecdc4" }}>🏃 Cardio</span>
+            </div>
+            <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px" }}>
+              <div style={{ fontSize: 13, color: "#6b6b80", marginBottom: 12 }}>ประเภท Cardio</div>
+              {["วิ่ง", "ปั่นจักรยาน", "ว่ายน้ำ", "Rowing", "Jump Rope", "Elliptical"].map(type => (
+                <div key={type} style={{ fontSize: 13, color: "#f0f0f5", padding: "8px 0", borderBottom: "1px solid #2a2a36" }}>{type}</div>
+              ))}
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>⏱️ เวลา Cardio (นาที)</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input type="number" value={cardioMinutes[selected] || ""}
+                    onChange={e => setCardioMinutes(prev => ({ ...prev, [selected]: parseInt(e.target.value) || 0 }))}
+                    placeholder="0"
+                    style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 20, outline: "none", textAlign: "center" }} />
+                  <span style={{ fontSize: 13, color: "#6b6b80" }}>นาที</span>
+                </div>
+                {cardioMinutes[selected] > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 14, color: "#4ecdc4", textAlign: "center", fontWeight: 700 }}>
+                    🔥 {Math.round(8 * bodyWeight * (cardioMinutes[selected] / 60))} kcal
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {!selectedGroup ? (
           <>
@@ -341,7 +374,7 @@ const steps = walkSteps[selected] || "";
               {WORKOUT_GROUPS.map(g => {
                 const hasLog = Object.keys(dayLog).some(k => g.exercises.includes(k) && dayLog[k].length > 0);
                 return (
-                  <div key={g.id} onClick={() => setSelectedGroup(g)}
+                  <div key={g.id} onClick={() => { setSelectedGroup(g); }}
                     style={{ background: "#17171f", borderRadius: 16, border: `1px solid ${hasLog ? g.color : "#2a2a36"}`, padding: "20px 16px", cursor: "pointer", textAlign: "center" }}>
                     <div style={{ fontSize: 28, marginBottom: 6 }}>{g.icon}</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: g.color }}>{g.name}</div>
@@ -419,10 +452,11 @@ const steps = walkSteps[selected] || "";
             </div>
 
             {/* Calories estimate */}
-            {calcWorkoutCalories(selected) > 0 && (
+            {(calcWorkoutCalories(selected).total > 0) && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #ff6b35", padding: "14px 16px", marginBottom: 12, textAlign: "center" }}>
                 <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 4 }}>🔥 พลังงานที่ใช้ (ประมาณการ)</div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{calcWorkoutCalories(selected)} kcal</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{calcWorkoutCalories(selected).total} kcal</div>
+                {calcWorkoutCalories(selected).cardio > 0 && <div style={{ fontSize: 11, color: "#6b6b80" }}>Cardio {calcWorkoutCalories(selected).cardio} + Weights {calcWorkoutCalories(selected).weight}</div>}
               </div>
             )}
           </>
