@@ -29,10 +29,11 @@ const PAGE_IDS = {
 };
 
 const WALK_TARGET = 8000;
-const SLEEP_TARGET = 8;
 
 const SECTIONS = [
-  { id: "move", icon: "🔥", name: "Move", color: "#ff6b35", items: [] },
+  { id: "move", icon: "🔥", name: "Move", color: "#ff6b35", items: [
+    { id: "Sleep 6h 😴", label: "นอน >6 ชม." }
+  ]},
   { id: "fuel", icon: "⚡", name: "Fuel", color: "#f7c948", items: [
     { id: "Water 2L 💧", label: "ดื่มน้ำ 2 ลิตร" },
     { id: "Egg 🥚", label: "กินไข่ 2 ฟอง" }
@@ -53,7 +54,7 @@ const SECTIONS = [
 ];
 
 const ALL_ITEMS = SECTIONS.flatMap(s => s.items);
-const TOTAL = ALL_ITEMS.length + 2; // +1 walk, +1 sleep
+const TOTAL = ALL_ITEMS.length + 1; // +1 for walk
 const DAY_SHORT = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 function getTodayStr() { return new Date().toISOString().slice(0, 10); }
@@ -76,27 +77,22 @@ function getWeekDates() {
   });
 }
 
-const isStats = window.location.pathname === "/stats";
-
 export default function App() {
   const today = getTodayStr();
   const weekDates = getWeekDates();
-  const [page, setPage] = useState(isStats ? "stats" : "check");
   const [selected, setSelected] = useState(today);
   const [checks, setChecks] = useState({});
   const [walkSteps, setWalkSteps] = useState({});
-  const [sleepHours, setSleepHours] = useState({});
   const [income, setIncome] = useState("");
   const [expense, setExpense] = useState("");
   const [status, setStatus] = useState(null);
 
   const dayChecks = checks[selected] || {};
   const steps = walkSteps[selected] || "";
-  const sleep = sleepHours[selected] || "";
   const walkScore = steps ? Math.min(1, parseInt(steps) / WALK_TARGET) : 0;
-  const sleepScore = sleep ? Math.min(1, parseFloat(sleep) / SLEEP_TARGET) : 0;
   const checkScore = ALL_ITEMS.filter(item => dayChecks[item.id]).length;
-  const scoreDisplay = parseFloat((walkScore + sleepScore + checkScore).toFixed(1));
+  const score = (walkScore + checkScore).toFixed(1);
+  const scoreDisplay = parseFloat(score);
 
   const toggle = (itemId) => {
     setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], [itemId]: !prev[selected]?.[itemId] } }));
@@ -106,8 +102,7 @@ export default function App() {
   const getDayScore = (date) => {
     const d = checks[date] || {};
     const w = walkSteps[date] ? Math.min(1, parseInt(walkSteps[date]) / WALK_TARGET) : 0;
-    const sl = sleepHours[date] ? Math.min(1, parseFloat(sleepHours[date]) / SLEEP_TARGET) : 0;
-    return w + sl + ALL_ITEMS.filter(item => d[item.id]).length;
+    return w + ALL_ITEMS.filter(item => d[item.id]).length;
   };
 
   const submit = async () => {
@@ -120,8 +115,9 @@ export default function App() {
       ALL_ITEMS.forEach(item => {
         properties[item.id] = { checkbox: !!dayChecks[item.id] };
       });
+      // Walk as checkbox based on target
       properties["Walk 8k 👟"] = { checkbox: steps ? parseInt(steps) >= WALK_TARGET : false };
-      properties["Sleep 6h 😴"] = { checkbox: sleep ? parseFloat(sleep) >= 6 : false };
+      // Store actual steps in Daily Score
       if (steps) properties["Daily Score"] = { number: parseInt(steps) };
       if (income) properties["รายรับ 💰"] = { number: parseFloat(income) };
       if (expense) properties["รายจ่าย 💸"] = { number: parseFloat(expense) };
@@ -137,94 +133,9 @@ export default function App() {
     } catch (e) { setStatus("error"); }
   };
 
-  // ── STATS PAGE ──
-  if (page === "stats") {
-    const allDates = Object.keys(PAGE_IDS).sort();
-    const scored = allDates.map(date => ({ date, score: getDayScore(date) }));
-    const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
-    const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
-
-    return (
-      <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>STATS</div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวมเดือนนี้</div>
-        </div>
-
-        {/* Summary Cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-          {[
-            { label: "เฉลี่ยต่อวัน", value: avg, unit: `/ ${TOTAL}` },
-            { label: "วันที่ดีที่สุด", value: best.score.toFixed(1), unit: best.date ? best.date.slice(5) : "-" },
-          ].map(card => (
-            <div key={card.label} style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px" }}>
-              <div style={{ fontSize: 11, color: "#6b6b80", marginBottom: 6 }}>{card.label}</div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{card.value}</div>
-              <div style={{ fontSize: 11, color: "#6b6b80" }}>{card.unit}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Bar Chart */}
-        <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12 }}>Score รายวัน</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
-            {allDates.slice(-14).map(date => {
-              const sc = getDayScore(date);
-              const h = TOTAL > 0 ? (sc / TOTAL) * 80 : 0;
-              return (
-                <div key={date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <div style={{ width: "100%", height: h, background: sc >= TOTAL * 0.7 ? "#4ecdc4" : sc >= TOTAL * 0.4 ? "#f7c948" : "#2a2a36", borderRadius: 3, transition: "height 0.3s" }} />
-                  <div style={{ fontSize: 8, color: "#6b6b80" }}>{new Date(date + "T00:00:00").getDate()}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Section breakdown */}
-        <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12 }}>ทำได้กี่ % ต่อ Section</div>
-          {SECTIONS.filter(s => s.items.length > 0).map(sec => {
-            const total = allDates.length * sec.items.length;
-            const done = allDates.reduce((acc, date) => {
-              const d = checks[date] || {};
-              return acc + sec.items.filter(item => d[item.id]).length;
-            }, 0);
-            const pct = total > 0 ? Math.round(done / total * 100) : 0;
-            return (
-              <div key={sec.id} style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13 }}>{sec.icon} {sec.name}</span>
-                  <span style={{ fontSize: 12, color: "#6b6b80" }}>{pct}%</span>
-                </div>
-                <div style={{ height: 4, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${pct}%`, background: sec.color, borderRadius: 99 }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Bottom Nav */}
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
-          <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-            <span style={{ fontSize: 20 }}>✅</span>
-            <span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span>
-          </div>
-          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}>
-            <span style={{ fontSize: 20 }}>📊</span>
-            <span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── CHECK PAGE ──
   return (
     <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
-
+      
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 20 }}>
         <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>DAILY TRACKER</div>
@@ -257,56 +168,46 @@ export default function App() {
         })}
       </div>
 
-      {/* Move Section — Walk + Sleep */}
+      {/* Walk Steps Input */}
       <div style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 16 }}>🔥</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: "#ff6b35" }}>Move</span>
           </div>
-          <span style={{ fontSize: 11, color: "#6b6b80" }}>{(walkScore + sleepScore).toFixed(2)} / 2 คะแนน</span>
+          <span style={{ fontSize: 11, color: "#6b6b80" }}>
+            {steps ? `${Math.round(walkScore * 100)}%` : "0%"} · {walkScore.toFixed(2)} คะแนน
+          </span>
         </div>
         <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
-
-        {/* Walk */}
-        <div style={{ marginBottom: 12 }}>
+        
+        {/* Walk input */}
+        <div style={{ marginBottom: 8 }}>
           <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>👟 จำนวนก้าววันนี้</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="number" value={steps}
+            <input
+              type="number"
+              value={steps}
               onChange={e => { setWalkSteps(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }}
               placeholder="0"
-              style={{ flex: 1, background: "#0e0e12", border: `1px solid ${steps && parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#2a2a36"}`, borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
+              style={{ flex: 1, background: "#0e0e12", border: `1px solid ${steps && parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#2a2a36"}`, borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", boxSizing: "border-box" }}
+            />
             <div style={{ fontSize: 12, color: "#6b6b80", flexShrink: 0 }}>/ {WALK_TARGET.toLocaleString()}</div>
           </div>
+          {/* Progress bar */}
           <div style={{ marginTop: 8, height: 4, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${Math.min(100, walkScore * 100)}%`, background: "#ff6b35", borderRadius: 99, transition: "width 0.3s" }} />
           </div>
-          {steps && <div style={{ marginTop: 4, fontSize: 11, color: parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#6b6b80" }}>
-            {parseInt(steps) >= WALK_TARGET ? "✅ ถึงเป้าแล้ว!" : `ขาดอีก ${(WALK_TARGET - parseInt(steps)).toLocaleString()} ก้าว`}
-          </div>}
-        </div>
-
-        {/* Sleep */}
-        <div>
-          <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>😴 นอนกี่ชั่วโมง</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="number" value={sleep} step="0.5"
-              onChange={e => { setSleepHours(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }}
-              placeholder="0"
-              style={{ flex: 1, background: "#0e0e12", border: `1px solid ${sleep && parseFloat(sleep) >= SLEEP_TARGET ? "#ff6b35" : "#2a2a36"}`, borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
-            <div style={{ fontSize: 12, color: "#6b6b80", flexShrink: 0 }}>/ {SLEEP_TARGET} ชม.</div>
-          </div>
-          <div style={{ marginTop: 8, height: 4, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${Math.min(100, sleepScore * 100)}%`, background: "#ff6b35", borderRadius: 99, transition: "width 0.3s" }} />
-          </div>
-          {sleep && <div style={{ marginTop: 4, fontSize: 11, color: parseFloat(sleep) >= 6 ? "#ff6b35" : "#6b6b80" }}>
-            {parseFloat(sleep) >= SLEEP_TARGET ? "✅ นอนครบแล้ว!" : parseFloat(sleep) >= 6 ? "✅ โอเค (>6 ชม.)" : `ขาดอีก ${(SLEEP_TARGET - parseFloat(sleep)).toFixed(1)} ชม.`}
-          </div>}
+          {steps && (
+            <div style={{ marginTop: 4, fontSize: 11, color: parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#6b6b80" }}>
+              {parseInt(steps) >= WALK_TARGET ? "✅ ถึงเป้าแล้ว!" : `ขาดอีก ${(WALK_TARGET - parseInt(steps)).toLocaleString()} ก้าว`}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Other Sections */}
-      {SECTIONS.filter(s => s.items.length > 0).map(sec => {
+      {SECTIONS.map(sec => {
         const done = sec.items.filter(item => dayChecks[item.id]).length;
         return (
           <div key={sec.id} style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", overflow: "hidden" }}>
@@ -359,19 +260,8 @@ export default function App() {
       </button>
       {status === "success" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#6b6b80" }}>Score {scoreDisplay}/{TOTAL} · {getThaiDate(selected)} 🎉</div>}
       {status === "error" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#ff6b6b" }}>บันทึกไม่ได้ — ลองใหม่อีกครั้งครับ</div>}
-
-      {/* Bottom Nav */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
-        <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}>
-          <span style={{ fontSize: 20 }}>✅</span>
-          <span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span>
-        </div>
-        <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-          <span style={{ fontSize: 20 }}>📊</span>
-          <span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span>
-        </div>
-      </div>
-
     </div>
   );
 }
+
+// Bottom Nav - add this inside the return, before closing div
