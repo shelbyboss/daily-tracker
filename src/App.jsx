@@ -391,7 +391,7 @@ export default function App() {
                   <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                     <span style={{ fontSize: 12, color: "#f7c948", fontWeight: 700 }}>🍽️ แคลอรี่วันนี้</span>
-                    {totalCalories > 0 && <span style={{ fontSize: 14, fontWeight: 700, color: "#f7c948" }}>{totalCalories} kcal</span>}
+                    {totalCalories > 0 && <span style={{ fontSize: 14, fontWeight: 700, color: "#f7c948" }}>{totalCalories} kcal · 🥩 {dayMeals.reduce((s, m) => s + (m.total_protein || 0), 0)}g</span>}
                   </div>
 
                   {/* Meal list */}
