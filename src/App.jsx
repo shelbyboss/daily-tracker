@@ -149,6 +149,8 @@ export default function App() {
   }, []);
 
   const dayChecks = checks[selected] || {};
+  const steps = walkSteps[selected] || "";
+  const sleep = sleepHours[selected] || "";
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
   const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
