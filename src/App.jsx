@@ -37,6 +37,7 @@ const WORKOUT_GROUPS = [
   { id: "shoulder", icon: "🔱", name: "ไหล่", color: "#a78bfa", exercises: ["Shoulder Press", "Lateral Raise", "Front Raise", "Face Pull", "Shrug"] },
   { id: "leg", icon: "🦵", name: "ขา", color: "#f7c948", exercises: ["Squat", "Leg Press", "Leg Curl", "Leg Extension", "Calf Raise"] },
   { id: "core", icon: "⚡", name: "Core", color: "#f472b6", exercises: ["Plank", "Crunch", "Leg Raise", "Russian Twist", "Cable Crunch"] },
+  { id: "cardio", icon: "🏃", name: "Cardio", color: "#4ecdc4", exercises: ["วิ่ง", "ปั่นจักรยาน", "ว่ายน้ำ", "Rowing", "Jump Rope"] },
 ];
 
 const SECTIONS = [
@@ -106,6 +107,8 @@ export default function App() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [workoutLog, setWorkoutLog] = useState({}); // { date: { exerciseName: [{sets, reps, kg}] } }
   const [customExercise, setCustomExercise] = useState("");
+  const [customExercises, setCustomExercises] = useState({});
+  const BODY_WEIGHT = 70;
 
   const [loading, setLoading] = useState(true);
 
@@ -145,12 +148,12 @@ export default function App() {
       .catch(() => setLoading(false));
   }, []);
 
-const dayChecks = checks[selected] || {};
-  const steps = walkSteps[selected] || "";
+  const dayChecks = checks[selected] || {};
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
   const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
   const isWorkoutToday = workoutDone[selected] || false;
+
   // Scoring
   const walkScore = steps ? Math.min(0.5, parseInt(steps) / WALK_TARGET * 0.5) : 0;
   const sleepScore = sleep ? Math.min(0.5, parseFloat(sleep) / SLEEP_TARGET * 0.5) : 0;
@@ -239,6 +242,33 @@ const dayChecks = checks[selected] || {};
     });
   };
 
+  // Get last session for an exercise
+  const getLastSession = (exercise) => {
+    const dates = Object.keys(workoutLog).sort().reverse();
+    for (const date of dates) {
+      if (date === selected) continue;
+      const sets = workoutLog[date]?.[exercise];
+      if (sets && sets.length > 0) return { date, sets };
+    }
+    return null;
+  };
+
+  // Estimate calories burned from workout
+  const calcWorkoutCalories = (date) => {
+    const log = workoutLog[date] || {};
+    let total = 0;
+    Object.entries(log).forEach(([ex, sets]) => {
+      sets.forEach(set => {
+        const reps = parseInt(set.reps) || 0;
+        const kg = parseFloat(set.kg) || BODY_WEIGHT * 0.3;
+        const setsNum = parseInt(set.sets) || 1;
+        // Rough estimate: 0.1 cal per rep per kg
+        total += reps * setsNum * kg * 0.1;
+      });
+    });
+    return Math.round(total);
+  };
+
   const submit = async () => {
     setStatus("loading");
     try {
@@ -301,13 +331,24 @@ const dayChecks = checks[selected] || {};
               <span style={{ fontSize: 18, fontWeight: 700, color: selectedGroup.color }}>{selectedGroup.icon} {selectedGroup.name}</span>
             </div>
 
-            {selectedGroup.exercises.map(ex => {
+            {selectedGroup.exercises.concat(customExercises[selectedGroup.id] || []).map(ex => {
               const sets = dayLog[ex] || [];
+              const last = getLastSession(ex);
               return (
                 <div key={ex} style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>{ex}</span>
-                    <button onClick={() => addSet(ex)} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "6px 12px", color: "#0e0e12", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ เพิ่ม Set</button>
+                    <div>
+                      <span style={{ fontSize: 14, fontWeight: 700 }}>{ex}</span>
+                      {last && <div style={{ fontSize: 10, color: "#6b6b80", marginTop: 2 }}>
+                        ครั้งล่าสุด {getThaiDate(last.date).split(' ').slice(1).join(' ')}: {last.sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}
+                      </div>}
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {last && sets.length === 0 && <button onClick={() => {
+                        setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected] || {}), [ex]: last.sets.map(s => ({ ...s })) } }));
+                      }} style={{ background: "transparent", border: `1px solid ${selectedGroup.color}`, borderRadius: 8, padding: "6px 10px", color: selectedGroup.color, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>ใช้เหมือนเดิม</button>}
+                      <button onClick={() => addSet(ex)} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "6px 12px", color: "#0e0e12", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Set</button>
+                    </div>
                   </div>
                   {sets.length > 0 && (
                     <div style={{ padding: "0 16px 12px" }}>
@@ -336,10 +377,27 @@ const dayChecks = checks[selected] || {};
               <div style={{ display: "flex", gap: 8 }}>
                 <input type="text" value={customExercise} onChange={e => setCustomExercise(e.target.value)} placeholder="ชื่อท่า..."
                   style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 14, outline: "none" }} />
-                <button onClick={() => { if (customExercise.trim()) { addSet(customExercise.trim()); setCustomExercise(""); } }}
-                  style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "10px 14px", color: "#0e0e12", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>เพิ่ม</button>
+                <button onClick={() => {
+                  if (customExercise.trim()) {
+                    const name = customExercise.trim();
+                    setCustomExercises(prev => ({
+                      ...prev,
+                      [selectedGroup.id]: [...(prev[selectedGroup.id] || []), name]
+                    }));
+                    addSet(name);
+                    setCustomExercise("");
+                  }
+                }} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "10px 14px", color: "#0e0e12", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>เพิ่ม</button>
               </div>
             </div>
+
+            {/* Calories estimate */}
+            {calcWorkoutCalories(selected) > 0 && (
+              <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #ff6b35", padding: "14px 16px", marginBottom: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 4 }}>🔥 พลังงานที่ใช้ (ประมาณการ)</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{calcWorkoutCalories(selected)} kcal</div>
+              </div>
+            )}
           </>
         )}
 
