@@ -102,7 +102,7 @@ export default function App() {
   const steps = walkSteps[selected] || "";
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
-  const totalCalories = dayMeals.reduce((s, m) => s + m.total, 0);
+  const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
 
   const walkScore = steps ? Math.min(0.5, parseInt(steps) / WALK_TARGET * 0.5) : 0;
   const sleepScore = sleep ? Math.min(0.5, parseFloat(sleep) / SLEEP_TARGET * 0.5) : 0;
@@ -387,12 +387,12 @@ export default function App() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                         <span style={{ fontSize: 11, color: "#6b6b80" }}>มื้อ {i+1} · {meal.time}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#f7c948" }}>{meal.total} kcal</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#f7c948" }}>{meal.total_calories || meal.total || 0} kcal</span>
                           <span onClick={() => removeMeal(i)} style={{ fontSize: 11, color: "#6b6b80", cursor: "pointer" }}>✕</span>
                         </div>
                       </div>
                       {meal.items?.map((item, j) => (
-                        <div key={j} style={{ fontSize: 12, color: "#6b6b80" }}>{item.name} · {item.calories} kcal</div>
+                        <div key={j} style={{ fontSize: 12, color: "#6b6b80" }}>{item.name} · {{item.calories} kcal · 🥩 {item.protein || 0}g</div>
                       ))}
                     </div>
                   ))}
