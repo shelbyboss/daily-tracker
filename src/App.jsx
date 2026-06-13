@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const PAGE_IDS = {
   "2026-06-01": "37c35d7f-367d-81c0-b77c-e4cb3337e8ea",
@@ -53,7 +53,7 @@ const SECTIONS = [
 ];
 
 const ALL_ITEMS = SECTIONS.flatMap(s => s.items);
-const TOTAL = ALL_ITEMS.length + 1; // 9 checkbox + 0.5 walk + 0.5 sleep = 10
+const TOTAL = ALL_ITEMS.length + 1;
 const DAY_SHORT = ["อา","จ","อ","พ","พฤ","ศ","ส"];
 
 function getTodayStr() { return new Date().toISOString().slice(0, 10); }
@@ -90,11 +90,18 @@ export default function App() {
   const [expense, setExpense] = useState("");
   const [status, setStatus] = useState(null);
 
+  // Food analysis state
+  const [meals, setMeals] = useState({}); // { date: [{name, calories, items}] }
+  const [analyzingFood, setAnalyzingFood] = useState(false);
+  const [foodError, setFoodError] = useState(null);
+  const fileInputRef = useRef(null);
+
   const dayChecks = checks[selected] || {};
   const steps = walkSteps[selected] || "";
   const sleep = sleepHours[selected] || "";
+  const dayMeals = meals[selected] || [];
+  const totalCalories = dayMeals.reduce((s, m) => s + m.total, 0);
 
-  // Walk เต็ม 0.5, Sleep เต็ม 0.5
   const walkScore = steps ? Math.min(0.5, parseInt(steps) / WALK_TARGET * 0.5) : 0;
   const sleepScore = sleep ? Math.min(0.5, parseFloat(sleep) / SLEEP_TARGET * 0.5) : 0;
   const checkScore = ALL_ITEMS.filter(item => dayChecks[item.id]).length;
@@ -112,6 +119,41 @@ export default function App() {
     return w + sl + ALL_ITEMS.filter(item => d[item.id]).length;
   };
 
+  const analyzeFood = async (file) => {
+    setAnalyzingFood(true);
+    setFoodError(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target.result.split(',')[1];
+        const mediaType = file.type;
+        const res = await fetch('/api/analyze-food', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64, mediaType }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setMeals(prev => ({
+            ...prev,
+            [selected]: [...(prev[selected] || []), { ...data, time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) }]
+          }));
+        } else {
+          setFoodError('วิเคราะห์ไม่ได้ ลองใหม่');
+        }
+        setAnalyzingFood(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      setFoodError('เกิดข้อผิดพลาด');
+      setAnalyzingFood(false);
+    }
+  };
+
+  const removeMeal = (index) => {
+    setMeals(prev => ({ ...prev, [selected]: prev[selected].filter((_, i) => i !== index) }));
+  };
+
   const submit = async () => {
     setStatus("loading");
     try {
@@ -127,6 +169,7 @@ export default function App() {
       if (steps) properties["Daily Score"] = { number: parseInt(steps) };
       if (income) properties["รายรับ 💰"] = { number: parseFloat(income) };
       if (expense) properties["รายจ่าย 💸"] = { number: parseFloat(expense) };
+      if (totalCalories > 0) properties["แคลอรี่ 🔥"] = { number: totalCalories };
 
       const res = await fetch("/api/update-notion", {
         method: "POST",
@@ -152,7 +195,6 @@ export default function App() {
           <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>STATS</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวมเดือนนี้</div>
         </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
           {[
             { label: "เฉลี่ยต่อวัน", value: avg, unit: `/ ${TOTAL}` },
@@ -165,7 +207,6 @@ export default function App() {
             </div>
           ))}
         </div>
-
         <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 20 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12 }}>Score รายวัน</div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
@@ -181,7 +222,6 @@ export default function App() {
             })}
           </div>
         </div>
-
         <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12 }}>ทำได้กี่ % ต่อ Section</div>
           {SECTIONS.filter(s => s.items.length > 0).map(sec => {
@@ -204,7 +244,6 @@ export default function App() {
             );
           })}
         </div>
-
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
           <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
             <span style={{ fontSize: 20 }}>✅</span>
@@ -263,14 +302,10 @@ export default function App() {
           <span style={{ fontSize: 11, color: "#6b6b80" }}>{(walkScore + sleepScore).toFixed(1)} / 1 คะแนน</span>
         </div>
         <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
-
-        {/* Walk */}
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>👟 จำนวนก้าววันนี้ (เต็ม 0.5)</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="number" value={steps}
-              onChange={e => { setWalkSteps(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }}
-              placeholder="0"
+            <input type="number" value={steps} onChange={e => { setWalkSteps(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }} placeholder="0"
               style={{ flex: 1, background: "#0e0e12", border: `1px solid ${steps && parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#2a2a36"}`, borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
             <div style={{ fontSize: 12, color: "#6b6b80", flexShrink: 0 }}>/ {WALK_TARGET.toLocaleString()}</div>
           </div>
@@ -281,14 +316,10 @@ export default function App() {
             {parseInt(steps) >= WALK_TARGET ? "✅ ถึงเป้าแล้ว! (+0.5)" : `ขาดอีก ${(WALK_TARGET - parseInt(steps)).toLocaleString()} ก้าว · +${walkScore.toFixed(2)}`}
           </div>}
         </div>
-
-        {/* Sleep */}
         <div>
           <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>😴 นอนกี่ชั่วโมง (เต็ม 0.5)</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="number" value={sleep} step="0.5"
-              onChange={e => { setSleepHours(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }}
-              placeholder="0"
+            <input type="number" value={sleep} step="0.5" onChange={e => { setSleepHours(prev => ({ ...prev, [selected]: e.target.value })); setStatus(null); }} placeholder="0"
               style={{ flex: 1, background: "#0e0e12", border: `1px solid ${sleep && parseFloat(sleep) >= SLEEP_TARGET ? "#ff6b35" : "#2a2a36"}`, borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
             <div style={{ fontSize: 12, color: "#6b6b80", flexShrink: 0 }}>/ {SLEEP_TARGET} ชม.</div>
           </div>
@@ -301,6 +332,7 @@ export default function App() {
         </div>
       </div>
 
+      {/* Sections */}
       {SECTIONS.filter(s => s.items.length > 0).map(sec => {
         const done = sec.items.filter(item => dayChecks[item.id]).length;
         return (
@@ -329,11 +361,49 @@ export default function App() {
                   </div>
                 );
               })}
+
+              {/* Food Analysis - เฉพาะ Fuel section */}
+              {sec.id === "fuel" && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: "#f7c948", fontWeight: 700 }}>🍽️ แคลอรี่วันนี้</span>
+                    {totalCalories > 0 && <span style={{ fontSize: 14, fontWeight: 700, color: "#f7c948" }}>{totalCalories} kcal</span>}
+                  </div>
+
+                  {/* Meal list */}
+                  {dayMeals.map((meal, i) => (
+                    <div key={i} style={{ background: "#0e0e12", borderRadius: 10, padding: "10px 12px", marginBottom: 6, border: "1px solid #2a2a36" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: "#6b6b80" }}>มื้อ {i+1} · {meal.time}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#f7c948" }}>{meal.total} kcal</span>
+                          <span onClick={() => removeMeal(i)} style={{ fontSize: 11, color: "#6b6b80", cursor: "pointer" }}>✕</span>
+                        </div>
+                      </div>
+                      {meal.items?.map((item, j) => (
+                        <div key={j} style={{ fontSize: 12, color: "#6b6b80" }}>{item.name} · {item.calories} kcal</div>
+                      ))}
+                    </div>
+                  ))}
+
+                  {/* Upload button */}
+                  <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
+                    onChange={e => e.target.files[0] && analyzeFood(e.target.files[0])}
+                    style={{ display: "none" }} />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={analyzingFood}
+                    style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px dashed #f7c948", background: "transparent", color: "#f7c948", fontSize: 13, fontWeight: 700, cursor: analyzingFood ? "not-allowed" : "pointer", opacity: analyzingFood ? 0.6 : 1 }}>
+                    {analyzingFood ? "⏳ กำลังวิเคราะห์..." : "📸 ถ่ายรูปอาหาร / อัพโหลด"}
+                  </button>
+                  {foodError && <div style={{ marginTop: 6, fontSize: 11, color: "#ff6b6b", textAlign: "center" }}>{foodError}</div>}
+                </div>
+              )}
             </div>
           </div>
         );
       })}
 
+      {/* Finance */}
       <div style={{ marginBottom: 20, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12, letterSpacing: 1, textTransform: "uppercase" }}>💰 การเงินวันนี้</div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -347,12 +417,14 @@ export default function App() {
         </div>
       </div>
 
+      {/* Submit */}
       <button onClick={submit} disabled={status === "loading"} style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: status === "success" ? "#4ecdc4" : status === "error" ? "#ff6b6b" : "#f0f0f5", color: "#0e0e12", fontSize: 15, fontWeight: 700, cursor: status === "loading" ? "not-allowed" : "pointer", transition: "all 0.3s", opacity: status === "loading" ? 0.7 : 1 }}>
         {status === "loading" ? "⏳ กำลังบันทึก..." : status === "success" ? "✅ บันทึกเข้า Notion แล้ว!" : status === "error" ? "❌ ลองอีกครั้ง" : "📤 Save to Notion"}
       </button>
       {status === "success" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#6b6b80" }}>Score {scoreDisplay}/{TOTAL} · {getThaiDate(selected)} 🎉</div>}
       {status === "error" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#ff6b6b" }}>บันทึกไม่ได้ — ลองใหม่อีกครั้งครับ</div>}
 
+      {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
         <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}>
           <span style={{ fontSize: 20 }}>✅</span>
