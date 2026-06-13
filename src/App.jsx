@@ -388,7 +388,7 @@ export default function App() {
                   ))}
 
                   {/* Upload button */}
-                  <input ref={fileInputRef} type="file" accept="image/*" capture="environment"
+                  <input ref={fileInputRef} type="file" accept="image/*"
                     onChange={e => e.target.files[0] && analyzeFood(e.target.files[0])}
                     style={{ display: "none" }} />
                   <button onClick={() => fileInputRef.current?.click()} disabled={analyzingFood}
