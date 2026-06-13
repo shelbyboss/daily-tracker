@@ -8,8 +8,8 @@ export default async function handler(req, res) {
 
   const { imageBase64, mediaType, description } = req.body;
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
-  const descText = description ? `ข้อมูลเพิ่มเติมจากผู้ใช้: ${description}` : '';
+  const descText = description ? `ข้อมูลเพิ่มเติม: ${description}` : '';
+  const jsonFormat = '{"items": [{"name": "ชื่ออาหาร", "calories": 0, "protein": 0}], "total_calories": 0, "total_protein": 0}';
 
   try {
     const content = imageBase64 ? [
@@ -19,12 +19,12 @@ export default async function handler(req, res) {
       },
       {
         type: 'text',
-        text: `วิเคราะห์แคลอรี่อาหารในรูปนี้ ${descText} ตอบเป็นภาษาไทย บอกว่าเห็นอาหารอะไรบ้าง แต่ละอย่างประมาณกี่แคลอรี่ และรวมทั้งหมดกี่แคลอรี่ ตอบใน JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ:{"items": [{"name": "ชื่ออาหาร", "calories": 000, "protein": 0}], "total_calories": 000, "total_protein": 0}
+        text: 'วิเคราะห์แคลอรี่และโปรตีนอาหารในรูปนี้ ' + descText + ' ตอบเป็นภาษาไทย ตอบใน JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ: ' + jsonFormat
       }
     ] : [
       {
         type: 'text',
-        text: `วิเคราะห์แคลอรี่อาหารนี้: ${description} บอกว่ามีอาหารอะไรบ้าง แต่ละอย่างประมาณกี่แคลอรี่ และรวมทั้งหมดกี่แคลอรี่ ตอบใน JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ: {"items": [{"name": "ชื่ออาหาร", "calories": 000, "protein": 0}], "total_calories": 000, "total_protein": 0}
+        text: 'วิเคราะห์แคลอรี่และโปรตีนอาหารนี้: ' + description + ' ตอบเป็นภาษาไทย ตอบใน JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ: ' + jsonFormat
       }
     ];
 
