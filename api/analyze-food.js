@@ -6,10 +6,28 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { imageBase64, mediaType } = req.body;
+  const { imageBase64, mediaType, description } = req.body;
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
+  const descText = description ? `ข้อมูลเพิ่มเติมจากผู้ใช้: ${description}` : '';
+
   try {
+    const content = imageBase64 ? [
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: mediaType, data: imageBase64 }
+      },
+      {
+        type: 'text',
+        text: `วิเคราะห์แคลอรี่อาหารในรูปนี้ ${descText} ตอบเป็นภาษาไทย บอกว่าเห็นอาหารอะไรบ้าง แต่ละอย่างประมาณกี่แคลอรี่ และรวมทั้งหมดกี่แคลอรี่ ตอบใน JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ: {"items": [{"name": "ชื่ออาหาร", "calories": 000}], "total": 000}`
+      }
+    ] : [
+      {
+        type: 'text',
+        text: `วิเคราะห์แคลอรี่อาหารนี้: ${description} บอกว่ามีอาหารอะไรบ้าง แต่ละอย่างประมาณกี่แคลอรี่ และรวมทั้งหมดกี่แคลอรี่ ตอบใน JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ: {"items": [{"name": "ชื่ออาหาร", "calories": 000}], "total": 000}`
+      }
+    ];
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -20,19 +38,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: imageBase64 }
-            },
-            {
-              type: 'text',
-              text: 'วิเคราะห์อาหารในรูปนี้ ตอบเป็นภาษาไทย บอกว่าเห็นอาหารอะไรบ้าง แต่ละอย่างประมาณกี่แคลอรี่ และรวมทั้งหมดกี่แคลอรี่ ตอบในรูปแบบ JSON เท่านั้น ไม่ต้องมีข้อความอื่น รูปแบบ: {"items": [{"name": "ชื่ออาหาร", "calories": 000}], "total": 000}'
-            }
-          ]
-        }]
+        messages: [{ role: 'user', content }]
       })
     });
 
