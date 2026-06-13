@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const PAGE_IDS = {
   "2026-06-01": "37c35d7f-367d-81c0-b77c-e4cb3337e8ea",
@@ -107,7 +107,43 @@ export default function App() {
   const [workoutLog, setWorkoutLog] = useState({}); // { date: { exerciseName: [{sets, reps, kg}] } }
   const [customExercise, setCustomExercise] = useState("");
 
-  const dayChecks = checks[selected] || {};
+  const [loading, setLoading] = useState(true);
+
+  // Load data from Notion on mount
+  useEffect(() => {
+    fetch('/api/get-notion')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.rows) return;
+        const newChecks = {};
+        const newWalkSteps = {};
+        const newSleepHours = {};
+        const newWorkoutDone = {};
+
+        data.rows.forEach(row => {
+          if (!row.date) return;
+          newChecks[row.date] = {
+            "Water 2L 💧": row.water,
+            "Egg 🥚": row.egg,
+            "Line Friends 💬": row.line,
+            "Hangout 🤝": row.hangout,
+            "Event 🎉": row.event,
+            "Podcast 🎧": row.podcast,
+            "Bujo 📓": row.bujo,
+            "Idea Content 💡": row.idea,
+            "Make Content ✂️": row.make,
+          };
+          if (row.dailyScore) newWalkSteps[row.date] = String(row.dailyScore);
+          if (row.workout) newWorkoutDone[row.date] = true;
+        });
+
+        setChecks(newChecks);
+        setWalkSteps(newWalkSteps);
+        setWorkoutDone(newWorkoutDone);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
   const steps = walkSteps[selected] || "";
   const sleep = sleepHours[selected] || "";
   const dayMeals = meals[selected] || [];
@@ -400,6 +436,13 @@ export default function App() {
   }
 
   // ── CHECK PAGE ──
+  if (loading) return (
+    <div style={{ background: "#0e0e12", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 32 }}>⏳</div>
+      <div style={{ fontSize: 14, color: "#6b6b80" }}>กำลังโหลดข้อมูล...</div>
+    </div>
+  );
+
   return (
     <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 20 }}>
