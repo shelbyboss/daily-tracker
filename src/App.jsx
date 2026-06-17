@@ -86,10 +86,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [workoutMinutes, setWorkoutMinutes] = useState({});
   const [cardioMinutes, setCardioMinutes] = useState({});
+  const [aiRecommend, setAiRecommend] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [pageIds, setPageIds] = useState({});
-  
+  const [pageIds, setPageIds] = useState({});
 
   // Load data from Notion on mount
   useEffect(() => {
@@ -101,7 +103,8 @@ export default function App() {
         const newWalkSteps = {};
         const newSleepHours = {};
         const newWorkoutDone = {};
-      
+        const newPageIds = {};
+        const newWorkoutLog = {};
 
         const newPageIds = {};
         data.rows.forEach(row => {
@@ -126,6 +129,7 @@ export default function App() {
         setWalkSteps(newWalkSteps);
         setWorkoutDone(newWorkoutDone);
         setPageIds(newPageIds);
+        setWorkoutLog(newWorkoutLog);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -224,6 +228,34 @@ export default function App() {
       const sets = (dayLog[exercise] || []).filter((_, i) => i !== idx);
       return { ...prev, [selected]: { ...dayLog, [exercise]: sets } };
     });
+  };
+
+  // Get AI workout recommendation
+  const getAIRecommend = async (group) => {
+    setLoadingAI(true);
+    setAiRecommend(null);
+    try {
+      const history = Object.entries(workoutLog)
+        .filter(([, log]) => Object.keys(log).some(k => group.exercises.includes(k)))
+        .sort(([a], [b]) => b.localeCompare(a))
+        .slice(0, 5)
+        .map(([date, log]) => ({
+          date: getThaiDate(date),
+          log: Object.entries(log)
+            .filter(([k]) => group.exercises.includes(k))
+            .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? '@' + s.kg + 'kg' : ''}`).join(', ')}`)
+            .join(' | ')
+        }));
+
+      const res = await fetch('/api/recommend-workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ muscleGroup: group.name, history })
+      });
+      const data = await res.json();
+      if (res.ok) setAiRecommend(data.exercises || []);
+    } catch (e) { console.error(e); }
+    setLoadingAI(false);
   };
 
   // Get last session for an exercise
@@ -367,9 +399,36 @@ export default function App() {
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <button onClick={() => setSelectedGroup(null)} style={{ background: "#17171f", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", cursor: "pointer", fontSize: 13 }}>← กลับ</button>
+              <button onClick={() => { setSelectedGroup(null); setAiRecommend(null); }} style={{ background: "#17171f", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", cursor: "pointer", fontSize: 13 }}>← กลับ</button>
               <span style={{ fontSize: 18, fontWeight: 700, color: selectedGroup.color }}>{selectedGroup.icon} {selectedGroup.name}</span>
+              <button onClick={() => getAIRecommend(selectedGroup)} disabled={loadingAI}
+                style={{ marginLeft: "auto", background: "#a78bfa", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: loadingAI ? 0.6 : 1 }}>
+                {loadingAI ? "⏳..." : "🤖 แนะนำ"}
+              </button>
             </div>
+
+            {/* AI Recommendation */}
+            {aiRecommend && (
+              <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #a78bfa", padding: "14px 16px", marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 12 }}>🤖 AI แนะนำวันนี้</div>
+                {aiRecommend.map((ex, i) => (
+                  <div key={i} style={{ marginBottom: 10, padding: "10px 12px", background: "#0e0e12", borderRadius: 10, border: "1px solid #2a2a36" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 14, fontWeight: 700 }}>{ex.name}</span>
+                      <button onClick={() => {
+                        const sets = Array(parseInt(ex.sets) || 3).fill(null).map(() => ({ sets: ex.sets, reps: ex.reps, kg: ex.kg || '' }));
+                        setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected] || {}), [ex.name]: sets } }));
+                      }} style={{ background: selectedGroup.color, border: "none", borderRadius: 6, padding: "4px 10px", color: "#0e0e12", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ เพิ่ม</button>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#6b6b80", marginTop: 4 }}>
+                      {ex.sets} sets × {ex.reps} reps {ex.kg ? `@ ${ex.kg}kg` : ''}
+                      {ex.lastSession && <span> · ครั้งล่าสุด: {ex.lastSession}</span>}
+                    </div>
+                    {ex.note && <div style={{ fontSize: 11, color: "#a78bfa", marginTop: 2 }}>💡 {ex.note}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {selectedGroup.exercises.concat(customExercises[selectedGroup.id] || []).map(ex => {
               const sets = dayLog[ex] || [];
