@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { muscleGroup, history } = req.body;
-  const ANTHROPIC_API_KEY = process.env.VITE_ANTHROPIC_API_KEY;
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
   const historyText = history && history.length > 0
     ? history.map(h => `${h.date}: ${h.log}`).join('\n')
