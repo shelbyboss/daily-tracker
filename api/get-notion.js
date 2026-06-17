@@ -27,9 +27,10 @@ export default async function handler(req, res) {
       const p = page.properties;
       const getCheck = (key) => p[key]?.checkbox || false;
       const getNum = (key) => p[key]?.number || 0;
-      const getText = (key) => p[key]?.rich_text?.[0]?.text?.content || p[key]?.text?.[0]?.text?.content || '';
+      const getText = (key) => p[key]?.rich_text?.[0]?.text?.content || '';
       const getDate = () => p['Date']?.date?.start || '';
       return {
+        pageId: page.id,
         date: getDate(),
         walk: getCheck('Walk 8k 👟'),
         sleep: getCheck('Sleep 6h 😴'),
