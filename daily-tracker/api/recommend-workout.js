@@ -38,8 +38,8 @@ ${historyText}
   "exercises": [
     {
       "name": "ชื่อท่า",
-      "sets": "3",
-      "reps": "10",
+      "sets": "4",
+      "reps": "12",
       "kg": "60",
       "note": "คำแนะนำสั้นๆ"
     }
