@@ -79,7 +79,7 @@ export default function App() {
 
   // Workout page state
   const [selectedGroup, setSelectedGroup] = useState(null);
-  const [workoutLog, setWorkoutLog] = useState({}); // { date: { exerciseName: [{sets, reps, kg}] } }
+  const [workoutLog, setWorkoutLog] = useState({});
   const [customExercise, setCustomExercise] = useState("");
   const [customExercises, setCustomExercises] = useState({});
   const [bodyWeight, setBodyWeight] = useState(() => parseFloat(localStorage.getItem("bodyWeight") || "62"));
@@ -91,9 +91,8 @@ export default function App() {
 
   const [loading, setLoading] = useState(true);
   const [pageIds, setPageIds] = useState({});
- 
 
-  // Load data from Notion on mount
+  // ── Load data from Notion on mount ──
   useEffect(() => {
     fetch('/api/get-notion')
       .then(r => r.json())
@@ -103,10 +102,9 @@ export default function App() {
         const newWalkSteps = {};
         const newSleepHours = {};
         const newWorkoutDone = {};
-        
         const newWorkoutLog = {};
-
         const newPageIds = {};
+
         data.rows.forEach(row => {
           if (!row.date) return;
           if (row.pageId) newPageIds[row.date] = row.pageId;
@@ -121,12 +119,14 @@ export default function App() {
             "Idea Content 💡": row.idea,
             "Make Content ✂️": row.make,
           };
-          if (row.dailyScore) newWalkSteps[row.date] = String(row.dailyScore);
+          if (row.walkSteps) newWalkSteps[row.date] = String(row.walkSteps);
+          if (row.sleepHours) newSleepHours[row.date] = String(row.sleepHours);
           if (row.workout) newWorkoutDone[row.date] = true;
         });
 
         setChecks(newChecks);
         setWalkSteps(newWalkSteps);
+        setSleepHours(newSleepHours);
         setWorkoutDone(newWorkoutDone);
         setPageIds(newPageIds);
         setWorkoutLog(newWorkoutLog);
@@ -230,7 +230,6 @@ export default function App() {
     });
   };
 
-  // Get AI workout recommendation
   const getAIRecommend = async (group) => {
     setLoadingAI(true);
     setAiRecommend(null);
@@ -258,7 +257,6 @@ export default function App() {
     setLoadingAI(false);
   };
 
-  // Get last session for an exercise
   const getLastSession = (exercise) => {
     const dates = Object.keys(workoutLog).sort().reverse();
     for (const date of dates) {
@@ -269,7 +267,6 @@ export default function App() {
     return null;
   };
 
-  // Estimate calories burned using MET formula
   const calcWorkoutCalories = (date) => {
     const weightMin = workoutMinutes[date] || 0;
     const cardioMin = cardioMinutes[date] || 0;
@@ -278,11 +275,13 @@ export default function App() {
     return { weight: weightCal, cardio: cardioCal, total: weightCal + cardioCal };
   };
 
+  // ── Submit to Notion ──
   const submit = async () => {
     setStatus("loading");
     try {
       const pageId = pageIds[selected] || PAGE_IDS[selected];
       if (!pageId) { setStatus("error"); return; }
+
       const properties = {};
       ALL_ITEMS.forEach(item => { properties[item.id] = { checkbox: !!dayChecks[item.id] }; });
       properties["Water 2L 💧"] = { checkbox: !!dayChecks["Water 2L 💧"] };
@@ -290,16 +289,27 @@ export default function App() {
       properties["Walk 8k 👟"] = { checkbox: steps ? parseInt(steps) >= WALK_TARGET : false };
       properties["Sleep 6h 😴"] = { checkbox: sleep ? parseFloat(sleep) >= 6 : false };
       properties["Workout 💪"] = { checkbox: isWorkoutToday };
-      if (steps) properties["Daily Score"] = { number: parseInt(steps) };
+
+      if (steps) properties["Walk Steps"] = { number: parseInt(steps) };
+      if (sleep) properties["Sleep Hours"] = { number: parseFloat(sleep) };
+      properties["Daily Score"] = { number: scoreDisplay };
+
       if (income) properties["รายรับ 💰"] = { number: parseFloat(income) };
       if (expense) properties["รายจ่าย 💸"] = { number: parseFloat(expense) };
       if (totalCalories > 0) properties["แคลอรี่ 🔥"] = { number: totalCalories };
+
       const dayLog = workoutLog[selected] || {};
-      const workoutSummary = Object.entries(dayLog).filter(([, sets]) => sets.length > 0)
-        .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}`).join(' | ');
+      const workoutSummary = Object.entries(dayLog)
+        .filter(([, sets]) => sets.length > 0)
+        .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}`)
+        .join(' | ');
       if (workoutSummary) properties["Workout Log 📝"] = { rich_text: [{ text: { content: workoutSummary } }] };
 
-      const res = await fetch("/api/update-notion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageId, properties }) });
+      const res = await fetch("/api/update-notion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId, properties })
+      });
       if (res.ok) { setStatus("success"); } else { setStatus("error"); }
     } catch (e) { setStatus("error"); }
   };
@@ -307,7 +317,6 @@ export default function App() {
   // ── WORKOUT PAGE ──
   if (page === "workout") {
     const dayLog = workoutLog[selected] || {};
-    const allExercises = selectedGroup ? [...selectedGroup.exercises, ...(Object.keys(dayLog).filter(k => !WORKOUT_GROUPS.flatMap(g => g.exercises).includes(k)))] : [];
 
     return (
       <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
@@ -317,7 +326,6 @@ export default function App() {
           <div onClick={() => setShowSettings(!showSettings)} style={{ position: "absolute", right: 0, top: 0, fontSize: 20, cursor: "pointer" }}>⚙️</div>
         </div>
 
-        {/* Settings popup */}
         {showSettings && (
           <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>⚙️ ตั้งค่า</div>
@@ -331,7 +339,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Workout duration */}
         <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, color: "#6b6b80" }}>⏱️ เวลา workout วันนี้</span>
@@ -348,7 +355,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Cardio special UI */}
         {selectedGroup?.isCardio && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -407,7 +413,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* AI Recommendation */}
             {aiRecommend && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #a78bfa", padding: "14px 16px", marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 12 }}>🤖 AI แนะนำวันนี้</div>
@@ -470,7 +475,6 @@ export default function App() {
               );
             })}
 
-            {/* Add custom exercise */}
             <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>➕ เพิ่มท่าเอง</div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -479,10 +483,7 @@ export default function App() {
                 <button onClick={() => {
                   if (customExercise.trim()) {
                     const name = customExercise.trim();
-                    setCustomExercises(prev => ({
-                      ...prev,
-                      [selectedGroup.id]: [...(prev[selectedGroup.id] || []), name]
-                    }));
+                    setCustomExercises(prev => ({ ...prev, [selectedGroup.id]: [...(prev[selectedGroup.id] || []), name] }));
                     addSet(name);
                     setCustomExercise("");
                   }
@@ -490,8 +491,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Calories estimate */}
-            {(calcWorkoutCalories(selected).total > 0) && (
+            {calcWorkoutCalories(selected).total > 0 && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #ff6b35", padding: "14px 16px", marginBottom: 12, textAlign: "center" }}>
                 <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 4 }}>🔥 พลังงานที่ใช้ (ประมาณการ)</div>
                 <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{calcWorkoutCalories(selected).total} kcal</div>
@@ -615,7 +615,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Settings popup */}
       {showSettings && (
         <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>⚙️ ตั้งค่า</div>
@@ -726,7 +725,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Other Sections */}
+      {/* Connect / Grow / Create Sections */}
       {SECTIONS.map(sec => {
         const done = sec.items.filter(item => dayChecks[item.id]).length;
         return (
