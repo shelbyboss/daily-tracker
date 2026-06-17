@@ -91,7 +91,7 @@ export default function App() {
 
   const [loading, setLoading] = useState(true);
   const [pageIds, setPageIds] = useState({});
-  const [pageIds, setPageIds] = useState({});
+ 
 
   // Load data from Notion on mount
   useEffect(() => {
@@ -103,7 +103,7 @@ export default function App() {
         const newWalkSteps = {};
         const newSleepHours = {};
         const newWorkoutDone = {};
-        const newPageIds = {};
+        
         const newWorkoutLog = {};
 
         const newPageIds = {};
