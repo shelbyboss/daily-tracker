@@ -1,35 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 
-const PAGE_IDS = {
-  "2026-06-01": "37c35d7f-367d-81c0-b77c-e4cb3337e8ea",
-  "2026-06-02": "37c35d7f-367d-8159-87e2-d0ebd251f554",
-  "2026-06-03": "37c35d7f-367d-8165-903d-f75e8310ad0b",
-  "2026-06-04": "37c35d7f-367d-811e-83a8-d5894833a80e",
-  "2026-06-06": "37c35d7f-367d-8100-9e07-ea6f0505d7a1",
-  "2026-06-08": "37c35d7f-367d-81ae-ba1b-f9a025c73097",
-  "2026-06-09": "37c35d7f-367d-8154-9f98-d65afc673c1e",
-  "2026-06-10": "37c35d7f-367d-819b-9563-f343e8a3fe23",
-  "2026-06-11": "37c35d7f-367d-81db-96a5-c48333238cce",
-  "2026-06-12": "37c35d7f-367d-8195-9cc3-d01757c9e86e",
-  "2026-06-13": "37c35d7f-367d-8120-b62a-df1c2bcbd6a0",
-  "2026-06-14": "37c35d7f-367d-81f9-9e92-f01b4058ef59",
-  "2026-06-15": "37c35d7f-367d-8138-8042-da91b6dbc93d",
-  "2026-06-16": "37c35d7f-367d-8176-87d9-e75ff792ba53",
-  "2026-06-18": "37c35d7f-367d-81a9-84e8-c8909994242e",
-  "2026-06-19": "37c35d7f-367d-8185-bea5-ef1029f3b644",
-  "2026-06-20": "37c35d7f-367d-8145-9072-c87bad588036",
-  "2026-06-21": "37c35d7f-367d-8184-82a0-c11b02ade249",
-  "2026-06-22": "37c35d7f-367d-8195-8859-fcbb5b7bd2a7",
-  "2026-06-23": "37c35d7f-367d-819e-9db8-fd1be9e2a809",
-  "2026-06-26": "37c35d7f-367d-8149-a720-c124f5d0f732",
-  "2026-06-27": "37c35d7f-367d-81e6-91e4-c4a68326c295",
-  "2026-06-28": "37c35d7f-367d-81cd-bf0a-cd7007c7bb06",
-  "2026-06-29": "37c35d7f-367d-8108-8226-dc641cefcbee",
-  "2026-06-30": "37c35d7f-367d-81be-a203-e64bb1362cd6",
-};
+const PAGE_IDS = {}; // loaded from Notion
 
-const WALK_TARGET = 8000;
-const SLEEP_TARGET = 8;
+const WALK_TARGET = 6500;
+const SLEEP_TARGET = 6;
 
 const WORKOUT_GROUPS = [
   { id: "chest", icon: "💪", name: "อก", color: "#ff6b35", exercises: ["Bench Press", "Incline Press", "Cable Fly", "Dumbbell Fly", "Push Up"] },
@@ -114,6 +88,8 @@ export default function App() {
   const [cardioMinutes, setCardioMinutes] = useState({});
 
   const [loading, setLoading] = useState(true);
+  const [pageIds, setPageIds] = useState({});
+  const [pageIds, setPageIds] = useState({});
 
   // Load data from Notion on mount
   useEffect(() => {
@@ -125,9 +101,12 @@ export default function App() {
         const newWalkSteps = {};
         const newSleepHours = {};
         const newWorkoutDone = {};
+        const newPageIds = {};
 
+        const newPageIds = {};
         data.rows.forEach(row => {
           if (!row.date) return;
+          if (row.pageId) newPageIds[row.date] = row.pageId;
           newChecks[row.date] = {
             "Water 2L 💧": row.water,
             "Egg 🥚": row.egg,
@@ -146,6 +125,7 @@ export default function App() {
         setChecks(newChecks);
         setWalkSteps(newWalkSteps);
         setWorkoutDone(newWorkoutDone);
+        setPageIds(newPageIds);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -269,7 +249,7 @@ export default function App() {
   const submit = async () => {
     setStatus("loading");
     try {
-      const pageId = PAGE_IDS[selected];
+      const pageId = pageIds[selected] || PAGE_IDS[selected];
       if (!pageId) { setStatus("error"); return; }
       const properties = {};
       ALL_ITEMS.forEach(item => { properties[item.id] = { checkbox: !!dayChecks[item.id] }; });
@@ -479,7 +459,7 @@ export default function App() {
 
   // ── STATS PAGE ──
   if (page === "stats") {
-    const allDates = Object.keys(PAGE_IDS).sort();
+    const allDates = Object.keys(pageIds).sort();
     const scored = allDates.map(date => ({ date, score: getDayScore(date) }));
     const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
     const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
@@ -684,42 +664,6 @@ export default function App() {
               </div>
             );
           })}
-
-          {/* Food Analysis */}
-          <div style={{ marginTop: 8 }}>
-            <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: "#f7c948", fontWeight: 700 }}>🍽️ แคลอรี่วันนี้</span>
-              {totalCalories > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: "#f7c948" }}>{totalCalories} kcal · 🥩 {dayMeals.reduce((s, m) => s + (m.total_protein || 0), 0)}g</span>}
-            </div>
-            {dayMeals.map((meal, i) => (
-              <div key={i} style={{ background: "#0e0e12", borderRadius: 10, padding: "10px 12px", marginBottom: 6, border: "1px solid #2a2a36" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: "#6b6b80" }}>มื้อ {i+1} · {meal.time}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f7c948" }}>{meal.total_calories || meal.total || 0} kcal</span>
-                    <span onClick={() => removeMeal(i)} style={{ fontSize: 11, color: "#6b6b80", cursor: "pointer" }}>✕</span>
-                  </div>
-                </div>
-                {meal.items?.map((item, j) => (
-                  <div key={j} style={{ fontSize: 12, color: "#6b6b80" }}>{item.name} · {item.calories} kcal · 🥩 {item.protein || 0}g</div>
-                ))}
-              </div>
-            ))}
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={e => { if (e.target.files[0]) setPendingFile(e.target.files[0]); }} style={{ display: "none" }} />
-            <input type="text" value={foodDesc} onChange={e => setFoodDesc(e.target.value)} placeholder="รายละเอียดเพิ่มเติม เช่น ข้าวผัดกะเพรา 1 จาน..."
-              style={{ width: "100%", background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px dashed #f7c948", background: pendingFile ? "rgba(247,201,72,0.1)" : "transparent", color: "#f7c948", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                {pendingFile ? `📷 ${pendingFile.name.slice(0, 12)}...` : "📸 เลือกรูป"}
-              </button>
-              <button onClick={() => analyzeFood(pendingFile, foodDesc)} disabled={analyzingFood || (!pendingFile && !foodDesc)}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: (pendingFile || foodDesc) ? "#f7c948" : "#2a2a36", color: "#0e0e12", fontSize: 12, fontWeight: 700, cursor: (pendingFile || foodDesc) ? "pointer" : "not-allowed", opacity: analyzingFood ? 0.6 : 1 }}>
-                {analyzingFood ? "⏳ วิเคราะห์..." : "🔍 วิเคราะห์แคล"}
-              </button>
-            </div>
-            {foodError && <div style={{ marginTop: 6, fontSize: 11, color: "#ff6b6b", textAlign: "center" }}>{foodError}</div>}
-          </div>
         </div>
       </div>
 
