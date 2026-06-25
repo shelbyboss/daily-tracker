@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from "react";
 
 const PAGE_IDS = {}; // loaded from Notion
 
-const WALK_TARGET = 8000;
-const SLEEP_TARGET = 8;
+const WALK_TARGET = 6500;
+const SLEEP_TARGET = 6;
 
 const WORKOUT_GROUPS = [
   { id: "chest", icon: "💪", name: "อก", color: "#ff6b35", exercises: ["Bench Press", "Incline Press", "Cable Fly", "Dumbbell Fly", "Push Up"] },
