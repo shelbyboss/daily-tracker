@@ -9,23 +9,36 @@ export default async function handler(req, res) {
   const DB_ID = '8473e7569526433e9dd583a187257a5e';
 
   try {
-    const response = await fetch(`https://api.notion.com/v1/databases/${DB_ID}/query`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NOTION_API_KEY}`,
-        'Content-Type': 'application/json',
-        'Notion-Version': '2022-06-28',
-      },
-      body: JSON.stringify({
+    let allResults = [];
+    let hasMore = true;
+    let startCursor = undefined;
+
+    while (hasMore) {
+      const body = {
         sorts: [{ property: 'Date', direction: 'ascending' }],
-        page_size: 31,
-      }),
-    });
+        page_size: 100,
+      };
+      if (startCursor) body.start_cursor = startCursor;
 
-    const data = await response.json();
-    if (!response.ok) return res.status(400).json({ error: data });
+      const response = await fetch(`https://api.notion.com/v1/databases/${DB_ID}/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${NOTION_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Notion-Version': '2022-06-28',
+        },
+        body: JSON.stringify(body),
+      });
 
-    const rows = data.results.map(page => {
+      const data = await response.json();
+      if (!response.ok) return res.status(400).json({ error: data });
+
+      allResults = allResults.concat(data.results);
+      hasMore = data.has_more;
+      startCursor = data.next_cursor;
+    }
+
+    const rows = allResults.map(page => {
       const p = page.properties;
       const getCheck = (key) => p[key]?.checkbox || false;
       const getNum = (key) => p[key]?.number || 0;
@@ -36,28 +49,22 @@ export default async function handler(req, res) {
       return {
         pageId: page.id,
         date: getDate(),
-        // MOVE
         walk: getCheck('Walk 8k 👟'),
         sleep: getCheck('Sleep 6h 😴'),
         workout: getCheck('Workout 💪'),
         walkSteps: getNum('Walk Steps'),
         sleepHours: getNum('Sleep Hours'),
-        // FUEL
         water: getCheck('Water 2L 💧'),
         egg: getCheck('Egg 🥚'),
-        // CONNECT
         hangout: getCheck('Hangout 🤝'),
         event: getCheck('Event 🎉'),
         tiktok: getCheck('TikTok 🔥'),
-        // GROW
         podcast: getCheck('Podcast 🎧'),
         bujo: getCheck('Bujo 📓'),
         learnCategory: getSelect('Learn Category'),
         learnDetail: getText('Learn Detail'),
-        // CREATE
         idea: getCheck('Idea Content 💡'),
         postReal: getCheck('Post Real ✅'),
-        // Finance
         income: getNum('รายรับ 💰'),
         expense: getNum('รายจ่าย 💸'),
         dailyScore: getNum('Daily Score'),
