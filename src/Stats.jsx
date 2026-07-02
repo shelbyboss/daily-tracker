@@ -19,48 +19,27 @@ function getThaiShort(dateStr) {
   return `${DAY_SHORT[d.getDay()]} ${d.getDate()}`;
 }
 
-// คำนวณ stat แต่ละแกนเป็น % จาก 7 วัน
 function calcStats(rows, weekDates) {
   const weekRows = weekDates.map(date => rows.find(r => r.date === date) || null);
-
-  const pct = (vals) => {
-    const done = vals.filter(Boolean).length;
-    return Math.round((done / 7) * 100);
-  };
-
-  const avgPct = (vals) => {
-    const avg = vals.reduce((s, v) => s + (v || 0), 0) / 7;
-    return Math.round(avg * 100);
-  };
-
-  // MOVE: walk(0.5) + sleep(0.5) + workout(2) → normalize ทีละ item
+  const pct = (vals) => Math.round((vals.filter(Boolean).length / 7) * 100);
   const walkPct = pct(weekRows.map(r => r?.walk));
   const sleepPct = pct(weekRows.map(r => r?.sleep));
   const workoutPct = pct(weekRows.map(r => r?.workout));
   const movePct = Math.round((walkPct + sleepPct + workoutPct * 2) / 4);
-
-  // FUEL: water + egg
   const waterPct = pct(weekRows.map(r => r?.water));
   const eggPct = pct(weekRows.map(r => r?.egg));
   const fuelPct = Math.round((waterPct + eggPct) / 2);
-
-  // CONNECT: hangout + event + tiktok
   const hangoutPct = pct(weekRows.map(r => r?.hangout));
   const eventPct = pct(weekRows.map(r => r?.event));
   const tiktokPct = pct(weekRows.map(r => r?.tiktok));
   const connectPct = Math.round((hangoutPct + eventPct + tiktokPct) / 3);
-
-  // GROW: podcast + bujo + learn
   const podcastPct = pct(weekRows.map(r => r?.podcast));
   const bujoPct = pct(weekRows.map(r => r?.bujo));
   const learnPct = pct(weekRows.map(r => r?.learnCategory));
   const growPct = Math.round((podcastPct + bujoPct + learnPct) / 3);
-
-  // CREATE: idea + postReal (postReal weighted 3x)
   const ideaPct = pct(weekRows.map(r => r?.idea));
   const postPct = pct(weekRows.map(r => r?.postReal));
   const createPct = Math.round((ideaPct + postPct * 3) / 4);
-
   return { movePct, fuelPct, connectPct, growPct, createPct };
 }
 
@@ -68,9 +47,7 @@ function getClass(stats) {
   const { movePct, fuelPct, connectPct, growPct, createPct } = stats;
   const all = [movePct, fuelPct, connectPct, growPct, createPct];
   const avg = all.reduce((a, b) => a + b, 0) / 5;
-
   if (avg >= 70) return { icon: "👑", name: "Shadow Monarch", color: "#a78bfa" };
-
   const max = Math.max(...all);
   if (max === movePct) return { icon: "⚔️", name: "Warrior", color: "#ff6b35" };
   if (max === growPct) return { icon: "🧙", name: "Mage", color: "#a78bfa" };
@@ -83,13 +60,7 @@ function getClass(stats) {
 function RadarChart({ stats }) {
   const { movePct, fuelPct, connectPct, growPct, createPct } = stats;
   const cls = getClass(stats);
-
-  const size = 280;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = 100;
-
-  // 5 แกน เริ่มจากบน วนตามเข็ม
+  const size = 280, cx = size / 2, cy = size / 2, r = 100;
   const axes = [
     { label: "MOVE", pct: movePct, color: "#ff6b35" },
     { label: "CREATE", pct: createPct, color: "#f472b6" },
@@ -97,92 +68,31 @@ function RadarChart({ stats }) {
     { label: "CONNECT", pct: connectPct, color: "#4ecdc4" },
     { label: "GROW", pct: growPct, color: "#a78bfa" },
   ];
-
   const angle = (i) => (Math.PI * 2 * i) / 5 - Math.PI / 2;
-
-  const point = (i, pct) => {
-    const a = angle(i);
-    const dist = (pct / 100) * r;
-    return {
-      x: cx + dist * Math.cos(a),
-      y: cy + dist * Math.sin(a),
-    };
-  };
-
-  const outerPoint = (i) => {
-    const a = angle(i);
-    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
-  };
-
-  const labelPoint = (i) => {
-    const a = angle(i);
-    const dist = r + 28;
-    return { x: cx + dist * Math.cos(a), y: cy + dist * Math.sin(a) };
-  };
-
+  const point = (i, pct) => { const a = angle(i), dist = (pct / 100) * r; return { x: cx + dist * Math.cos(a), y: cy + dist * Math.sin(a) }; };
+  const outerPoint = (i) => { const a = angle(i); return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }; };
+  const labelPoint = (i) => { const a = angle(i), dist = r + 28; return { x: cx + dist * Math.cos(a), y: cy + dist * Math.sin(a) }; };
   const dataPoints = axes.map((ax, i) => point(i, ax.pct));
   const polygon = dataPoints.map(p => `${p.x},${p.y}`).join(' ');
-
-  // grid circles
   const grids = [25, 50, 75, 100];
-
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Grid circles */}
         {grids.map(g => {
-          const gridPoints = axes.map((_, i) => {
-            const a = angle(i);
-            const dist = (g / 100) * r;
-            return `${cx + dist * Math.cos(a)},${cy + dist * Math.sin(a)}`;
-          }).join(' ');
-          return (
-            <polygon key={g} points={gridPoints}
-              fill="none" stroke="#2a2a36" strokeWidth="1" />
-          );
+          const gridPoints = axes.map((_, i) => { const a = angle(i), dist = (g / 100) * r; return `${cx + dist * Math.cos(a)},${cy + dist * Math.sin(a)}`; }).join(' ');
+          return <polygon key={g} points={gridPoints} fill="none" stroke="#2a2a36" strokeWidth="1" />;
         })}
-
-        {/* Axis lines */}
-        {axes.map((_, i) => {
-          const op = outerPoint(i);
-          return <line key={i} x1={cx} y1={cy} x2={op.x} y2={op.y} stroke="#2a2a36" strokeWidth="1" />;
-        })}
-
-        {/* Data polygon */}
-        <polygon points={polygon}
-          fill={`${cls.color}30`}
-          stroke={cls.color}
-          strokeWidth="2"
-          strokeLinejoin="round" />
-
-        {/* Data points */}
-        {dataPoints.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="4" fill={axes[i].color} />
-        ))}
-
-        {/* Labels */}
-        {axes.map((ax, i) => {
-          const lp = labelPoint(i);
-          return (
-            <g key={i}>
-              <text x={lp.x} y={lp.y - 6} textAnchor="middle" fill={ax.color}
-                fontSize="10" fontWeight="700" fontFamily="Sarabun, sans-serif">
-                {ax.label}
-              </text>
-              <text x={lp.x} y={lp.y + 8} textAnchor="middle" fill="#6b6b80"
-                fontSize="9" fontFamily="Sarabun, sans-serif">
-                {ax.pct}%
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Center class */}
+        {axes.map((_, i) => { const op = outerPoint(i); return <line key={i} x1={cx} y1={cy} x2={op.x} y2={op.y} stroke="#2a2a36" strokeWidth="1" />; })}
+        <polygon points={polygon} fill={`${cls.color}30`} stroke={cls.color} strokeWidth="2" strokeLinejoin="round" />
+        {dataPoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill={axes[i].color} />)}
+        {axes.map((ax, i) => { const lp = labelPoint(i); return (
+          <g key={i}>
+            <text x={lp.x} y={lp.y - 6} textAnchor="middle" fill={ax.color} fontSize="10" fontWeight="700" fontFamily="Sarabun, sans-serif">{ax.label}</text>
+            <text x={lp.x} y={lp.y + 8} textAnchor="middle" fill="#6b6b80" fontSize="9" fontFamily="Sarabun, sans-serif">{ax.pct}%</text>
+          </g>
+        ); })}
         <text x={cx} y={cy - 8} textAnchor="middle" fontSize="22">{cls.icon}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fill={cls.color}
-          fontSize="11" fontWeight="700" fontFamily="Sarabun, sans-serif">
-          {cls.name}
-        </text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill={cls.color} fontSize="11" fontWeight="700" fontFamily="Sarabun, sans-serif">{cls.name}</text>
       </svg>
     </div>
   );
@@ -203,14 +113,27 @@ export default function Stats() {
 
   const s = { background: '#0e0e12', minHeight: '100vh', color: '#f0f0f5', fontFamily: "'Sarabun', sans-serif", padding: '20px 16px 80px', maxWidth: 480, margin: '0 auto' };
 
-  if (loading) return <div style={{ ...s, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#6b6b80' }}>กำลังโหลด...</div>;
-  if (error) return <div style={{ ...s, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#ff6b6b' }}>{error}</div>;
+  const BottomNav = () => (
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
+      <div onClick={() => window.location.href = '/'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
+        <span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span>
+      </div>
+      <div onClick={() => window.location.href = '/'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
+        <span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, opacity: 1 }}>
+        <span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span>
+      </div>
+    </div>
+  );
+
+  if (loading) return <div style={{ ...s, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#6b6b80' }}>กำลังโหลด...<BottomNav /></div>;
+  if (error) return <div style={{ ...s, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#ff6b6b' }}>{error}<BottomNav /></div>;
 
   const activeRows = rows.filter(r => r.date);
   const totalIncome = activeRows.reduce((s, r) => s + r.income, 0);
   const totalExpense = activeRows.reduce((s, r) => s + r.expense, 0);
 
-  // score รายวัน (คำนวณจาก field จริง)
   const getDayScore = (row) => {
     if (!row) return 0;
     const walk = row.walkSteps ? Math.min(0.5, row.walkSteps / 6500 * 0.5) : 0;
@@ -233,7 +156,6 @@ export default function Stats() {
   const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
   const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
   const workoutDays = weekDates.filter(d => rows.find(r => r.date === d)?.workout).length;
-
   const weekStats = calcStats(rows, weekDates);
   const cls = getClass(weekStats);
 
@@ -244,7 +166,6 @@ export default function Stats() {
         <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวม</div>
       </div>
 
-      {/* Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'Avg Score', value: avg, unit: '/10', color: '#f0f0f5' },
@@ -259,14 +180,12 @@ export default function Stats() {
         ))}
       </div>
 
-      {/* Radar Chart */}
       <div style={{ background: '#17171f', borderRadius: 16, border: `1px solid ${cls.color}40`, padding: '16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>⚡ Weekly Stats</div>
         <div style={{ fontSize: 11, color: '#6b6b80', marginBottom: 16 }}>สัปดาห์นี้ (% จาก 7 วัน)</div>
         <RadarChart stats={weekStats} />
       </div>
 
-      {/* Score Bar Chart */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>📊 Score รายวัน</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
@@ -283,7 +202,6 @@ export default function Stats() {
         </div>
       </div>
 
-      {/* Workout Week */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>💪 Workout สัปดาห์นี้</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
@@ -305,7 +223,6 @@ export default function Stats() {
         </div>
       </div>
 
-      {/* Finance */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>💰 การเงินรายวัน</div>
         {activeRows.filter(r => r.income > 0 || r.expense > 0).slice(-10).map((row, i) => (
@@ -321,6 +238,8 @@ export default function Stats() {
           <div style={{ fontSize: 13, color: '#6b6b80', textAlign: 'center', padding: '20px 0' }}>ยังไม่มีข้อมูลการเงินครับ</div>
         )}
       </div>
+
+      <BottomNav />
     </div>
   );
 }
