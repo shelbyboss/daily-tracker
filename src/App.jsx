@@ -388,7 +388,7 @@ export default function App() {
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
           <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
           <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
-          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
+          <div onClick={() => window.location.href = '/stats'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
         </div>
       </div>
     );
@@ -452,7 +452,7 @@ export default function App() {
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
           <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
           <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
-          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
+          <div onClick={() => window.location.href = '/stats'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
         </div>
       </div>
     );
@@ -664,7 +664,7 @@ export default function App() {
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
         <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
         <div onClick={() => { if (isWorkoutToday) setPage("workout"); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: isWorkoutToday ? "pointer" : "default", opacity: isWorkoutToday ? 1 : 0.2 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
-        <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
+        <div onClick={() => window.location.href = '/stats'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
       </div>
     </div>
   );
