@@ -21,6 +21,7 @@ export default async function handler(req, res) {
         page_size: 31,
       }),
     });
+
     const data = await response.json();
     if (!response.ok) return res.status(400).json({ error: data });
 
@@ -29,26 +30,38 @@ export default async function handler(req, res) {
       const getCheck = (key) => p[key]?.checkbox || false;
       const getNum = (key) => p[key]?.number || 0;
       const getText = (key) => p[key]?.rich_text?.[0]?.text?.content || '';
+      const getSelect = (key) => p[key]?.select?.name || '';
       const getDate = () => p['Date']?.date?.start || '';
+
       return {
         pageId: page.id,
         date: getDate(),
+        // MOVE
         walk: getCheck('Walk 8k 👟'),
         sleep: getCheck('Sleep 6h 😴'),
+        workout: getCheck('Workout 💪'),
+        walkSteps: getNum('Walk Steps'),
+        sleepHours: getNum('Sleep Hours'),
+        // FUEL
         water: getCheck('Water 2L 💧'),
         egg: getCheck('Egg 🥚'),
-        workout: getCheck('Workout 💪'),
-        line: getCheck('Line Friends 💬'),
+        // CONNECT
         hangout: getCheck('Hangout 🤝'),
         event: getCheck('Event 🎉'),
+        tiktok: getCheck('TikTok 🔥'),
+        // GROW
         podcast: getCheck('Podcast 🎧'),
         bujo: getCheck('Bujo 📓'),
+        learnCategory: getSelect('Learn Category'),
+        learnDetail: getText('Learn Detail'),
+        // CREATE
         idea: getCheck('Idea Content 💡'),
-        make: getCheck('Make Content ✂️'),
-        dailyScore: getNum('Daily Score'),
-        calories: getNum('แคลอรี่ 🔥'),
+        postReal: getCheck('Post Real ✅'),
+        // Finance
         income: getNum('รายรับ 💰'),
         expense: getNum('รายจ่าย 💸'),
+        dailyScore: getNum('Daily Score'),
+        calories: getNum('แคลอรี่ 🔥'),
         workoutLog: getText('Workout Log 📝'),
       };
     });
