@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
 
-const SECTION_KEYS = [
-  { key: 'move', label: '🔥 Move', color: '#ff6b35', fields: ['walk', 'sleep'] },
-  { key: 'fuel', label: '⚡ Fuel', color: '#f7c948', fields: ['water', 'egg'] },
-  { key: 'connect', label: '🌐 Connect', color: '#4ecdc4', fields: ['line', 'hangout', 'event'] },
-  { key: 'grow', label: '🧠 Grow', color: '#a78bfa', fields: ['podcast', 'bujo'] },
-  { key: 'create', label: '🎨 Create', color: '#f472b6', fields: ['idea', 'make'] },
-];
-
 const DAY_SHORT = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+
+function getWeekDates() {
+  const today = new Date();
+  const sun = new Date(today);
+  sun.setDate(today.getDate() - today.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sun);
+    d.setDate(sun.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+}
 
 function getThaiShort(dateStr) {
   if (!dateStr) return '';
@@ -16,14 +19,180 @@ function getThaiShort(dateStr) {
   return `${DAY_SHORT[d.getDay()]} ${d.getDate()}`;
 }
 
-function getSectionScore(row, fields) {
-  return fields.filter(f => row[f]).length / fields.length * 100;
+// คำนวณ stat แต่ละแกนเป็น % จาก 7 วัน
+function calcStats(rows, weekDates) {
+  const weekRows = weekDates.map(date => rows.find(r => r.date === date) || null);
+
+  const pct = (vals) => {
+    const done = vals.filter(Boolean).length;
+    return Math.round((done / 7) * 100);
+  };
+
+  const avgPct = (vals) => {
+    const avg = vals.reduce((s, v) => s + (v || 0), 0) / 7;
+    return Math.round(avg * 100);
+  };
+
+  // MOVE: walk(0.5) + sleep(0.5) + workout(2) → normalize ทีละ item
+  const walkPct = pct(weekRows.map(r => r?.walk));
+  const sleepPct = pct(weekRows.map(r => r?.sleep));
+  const workoutPct = pct(weekRows.map(r => r?.workout));
+  const movePct = Math.round((walkPct + sleepPct + workoutPct * 2) / 4);
+
+  // FUEL: water + egg
+  const waterPct = pct(weekRows.map(r => r?.water));
+  const eggPct = pct(weekRows.map(r => r?.egg));
+  const fuelPct = Math.round((waterPct + eggPct) / 2);
+
+  // CONNECT: hangout + event + tiktok
+  const hangoutPct = pct(weekRows.map(r => r?.hangout));
+  const eventPct = pct(weekRows.map(r => r?.event));
+  const tiktokPct = pct(weekRows.map(r => r?.tiktok));
+  const connectPct = Math.round((hangoutPct + eventPct + tiktokPct) / 3);
+
+  // GROW: podcast + bujo + learn
+  const podcastPct = pct(weekRows.map(r => r?.podcast));
+  const bujoPct = pct(weekRows.map(r => r?.bujo));
+  const learnPct = pct(weekRows.map(r => r?.learnCategory));
+  const growPct = Math.round((podcastPct + bujoPct + learnPct) / 3);
+
+  // CREATE: idea + postReal (postReal weighted 3x)
+  const ideaPct = pct(weekRows.map(r => r?.idea));
+  const postPct = pct(weekRows.map(r => r?.postReal));
+  const createPct = Math.round((ideaPct + postPct * 3) / 4);
+
+  return { movePct, fuelPct, connectPct, growPct, createPct };
+}
+
+function getClass(stats) {
+  const { movePct, fuelPct, connectPct, growPct, createPct } = stats;
+  const all = [movePct, fuelPct, connectPct, growPct, createPct];
+  const avg = all.reduce((a, b) => a + b, 0) / 5;
+
+  if (avg >= 70) return { icon: "👑", name: "Shadow Monarch", color: "#a78bfa" };
+
+  const max = Math.max(...all);
+  if (max === movePct) return { icon: "⚔️", name: "Warrior", color: "#ff6b35" };
+  if (max === growPct) return { icon: "🧙", name: "Mage", color: "#a78bfa" };
+  if (max === createPct) return { icon: "🎨", name: "Artist", color: "#f472b6" };
+  if (max === connectPct) return { icon: "🌐", name: "Ranger", color: "#4ecdc4" };
+  if (max === fuelPct) return { icon: "⚡", name: "Guardian", color: "#f7c948" };
+  return { icon: "❓", name: "Unknown", color: "#6b6b80" };
+}
+
+function RadarChart({ stats }) {
+  const { movePct, fuelPct, connectPct, growPct, createPct } = stats;
+  const cls = getClass(stats);
+
+  const size = 280;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 100;
+
+  // 5 แกน เริ่มจากบน วนตามเข็ม
+  const axes = [
+    { label: "MOVE", pct: movePct, color: "#ff6b35" },
+    { label: "CREATE", pct: createPct, color: "#f472b6" },
+    { label: "FUEL", pct: fuelPct, color: "#f7c948" },
+    { label: "CONNECT", pct: connectPct, color: "#4ecdc4" },
+    { label: "GROW", pct: growPct, color: "#a78bfa" },
+  ];
+
+  const angle = (i) => (Math.PI * 2 * i) / 5 - Math.PI / 2;
+
+  const point = (i, pct) => {
+    const a = angle(i);
+    const dist = (pct / 100) * r;
+    return {
+      x: cx + dist * Math.cos(a),
+      y: cy + dist * Math.sin(a),
+    };
+  };
+
+  const outerPoint = (i) => {
+    const a = angle(i);
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  };
+
+  const labelPoint = (i) => {
+    const a = angle(i);
+    const dist = r + 28;
+    return { x: cx + dist * Math.cos(a), y: cy + dist * Math.sin(a) };
+  };
+
+  const dataPoints = axes.map((ax, i) => point(i, ax.pct));
+  const polygon = dataPoints.map(p => `${p.x},${p.y}`).join(' ');
+
+  // grid circles
+  const grids = [25, 50, 75, 100];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Grid circles */}
+        {grids.map(g => {
+          const gridPoints = axes.map((_, i) => {
+            const a = angle(i);
+            const dist = (g / 100) * r;
+            return `${cx + dist * Math.cos(a)},${cy + dist * Math.sin(a)}`;
+          }).join(' ');
+          return (
+            <polygon key={g} points={gridPoints}
+              fill="none" stroke="#2a2a36" strokeWidth="1" />
+          );
+        })}
+
+        {/* Axis lines */}
+        {axes.map((_, i) => {
+          const op = outerPoint(i);
+          return <line key={i} x1={cx} y1={cy} x2={op.x} y2={op.y} stroke="#2a2a36" strokeWidth="1" />;
+        })}
+
+        {/* Data polygon */}
+        <polygon points={polygon}
+          fill={`${cls.color}30`}
+          stroke={cls.color}
+          strokeWidth="2"
+          strokeLinejoin="round" />
+
+        {/* Data points */}
+        {dataPoints.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="4" fill={axes[i].color} />
+        ))}
+
+        {/* Labels */}
+        {axes.map((ax, i) => {
+          const lp = labelPoint(i);
+          return (
+            <g key={i}>
+              <text x={lp.x} y={lp.y - 6} textAnchor="middle" fill={ax.color}
+                fontSize="10" fontWeight="700" fontFamily="Sarabun, sans-serif">
+                {ax.label}
+              </text>
+              <text x={lp.x} y={lp.y + 8} textAnchor="middle" fill="#6b6b80"
+                fontSize="9" fontFamily="Sarabun, sans-serif">
+                {ax.pct}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Center class */}
+        <text x={cx} y={cy - 8} textAnchor="middle" fontSize="22">{cls.icon}</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill={cls.color}
+          fontSize="11" fontWeight="700" fontFamily="Sarabun, sans-serif">
+          {cls.name}
+        </text>
+      </svg>
+    </div>
+  );
 }
 
 export default function Stats() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const weekDates = getWeekDates();
 
   useEffect(() => {
     fetch('/api/get-notion')
@@ -32,29 +201,55 @@ export default function Stats() {
       .catch(() => { setError('โหลดไม่ได้'); setLoading(false); });
   }, []);
 
-  const activeRows = rows.filter(r => r.date);
-  const totalIncome = activeRows.reduce((s, r) => s + r.income, 0);
-  const totalExpense = activeRows.reduce((s, r) => s + r.expense, 0);
-  const avgScore = activeRows.length ? (activeRows.reduce((s, r) => s + r.score, 0) / activeRows.length).toFixed(1) : 0;
-
   const s = { background: '#0e0e12', minHeight: '100vh', color: '#f0f0f5', fontFamily: "'Sarabun', sans-serif", padding: '20px 16px 80px', maxWidth: 480, margin: '0 auto' };
 
   if (loading) return <div style={{ ...s, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#6b6b80' }}>กำลังโหลด...</div>;
   if (error) return <div style={{ ...s, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#ff6b6b' }}>{error}</div>;
 
+  const activeRows = rows.filter(r => r.date);
+  const totalIncome = activeRows.reduce((s, r) => s + r.income, 0);
+  const totalExpense = activeRows.reduce((s, r) => s + r.expense, 0);
+
+  // score รายวัน (คำนวณจาก field จริง)
+  const getDayScore = (row) => {
+    if (!row) return 0;
+    const walk = row.walkSteps ? Math.min(0.5, row.walkSteps / 6500 * 0.5) : 0;
+    const sleep = row.sleepHours ? Math.min(0.5, row.sleepHours / 6 * 0.5) : 0;
+    const workout = row.workout ? 2 : 0;
+    const water = row.water ? 0.5 : 0;
+    const egg = row.egg ? 0.5 : 0;
+    const hangout = row.hangout ? 1 : 0;
+    const event = row.event ? 1 : 0;
+    const tiktok = row.tiktok ? 0.5 : 0;
+    const podcast = row.podcast ? 1 : 0;
+    const bujo = row.bujo ? 0.5 : 0;
+    const learn = row.learnCategory ? 1 : 0;
+    const idea = row.idea ? 0.5 : 0;
+    const post = row.postReal ? 1.5 : 0;
+    return walk + sleep + workout + water + egg + hangout + event + tiktok + podcast + bujo + learn + idea + post;
+  };
+
+  const scored = activeRows.map(r => ({ date: r.date, score: getDayScore(r) }));
+  const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
+  const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
+  const workoutDays = weekDates.filter(d => rows.find(r => r.date === d)?.workout).length;
+
+  const weekStats = calcStats(rows, weekDates);
+  const cls = getClass(weekStats);
+
   return (
     <div style={s}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#6b6b80', marginBottom: 4 }}>WEEKLY STATS</div>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>มิถุนายน 2026</div>
+        <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: '#6b6b80', marginBottom: 4 }}>STATS</div>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวม</div>
       </div>
 
       {/* Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {[
-          { label: 'Avg Score', value: avgScore, unit: '/11', color: '#f0f0f5' },
-          { label: 'รายรับ', value: totalIncome.toLocaleString(), unit: '฿', color: '#4ecdc4' },
-          { label: 'รายจ่าย', value: totalExpense.toLocaleString(), unit: '฿', color: '#ff6b6b' },
+          { label: 'Avg Score', value: avg, unit: '/10', color: '#f0f0f5' },
+          { label: 'รายรับรวม', value: totalIncome.toLocaleString(), unit: '฿', color: '#4ecdc4' },
+          { label: 'รายจ่ายรวม', value: totalExpense.toLocaleString(), unit: '฿', color: '#ff6b6b' },
         ].map(card => (
           <div key={card.label} style={{ background: '#17171f', borderRadius: 12, border: '1px solid #2a2a36', padding: '12px 10px', textAlign: 'center' }}>
             <div style={{ fontSize: 10, color: '#6b6b80', marginBottom: 4 }}>{card.label}</div>
@@ -64,69 +259,56 @@ export default function Stats() {
         ))}
       </div>
 
-      {/* Daily Score Bar Chart */}
+      {/* Radar Chart */}
+      <div style={{ background: '#17171f', borderRadius: 16, border: `1px solid ${cls.color}40`, padding: '16px', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>⚡ Weekly Stats</div>
+        <div style={{ fontSize: 11, color: '#6b6b80', marginBottom: 16 }}>สัปดาห์นี้ (% จาก 7 วัน)</div>
+        <RadarChart stats={weekStats} />
+      </div>
+
+      {/* Score Bar Chart */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>📊 Score รายวัน</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
-          {activeRows.map((row, i) => {
-            const pct = row.score / 11 * 100;
+          {scored.slice(-14).map((row, i) => {
+            const pct = row.score / 10 * 100;
             return (
               <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                <div style={{ fontSize: 8, color: '#6b6b80' }}>{row.score > 0 ? row.score : ''}</div>
+                <div style={{ fontSize: 8, color: '#6b6b80' }}>{row.score > 0 ? row.score.toFixed(1) : ''}</div>
                 <div style={{ width: '100%', height: Math.max(2, pct * 0.6), background: pct > 60 ? '#4ecdc4' : pct > 30 ? '#f7c948' : '#2a2a36', borderRadius: '3px 3px 0 0', transition: 'height 0.4s' }} />
-                <div style={{ fontSize: 8, color: '#6b6b80', whiteSpace: 'nowrap' }}>{getThaiShort(row.date).split(' ')[1]}</div>
+                <div style={{ fontSize: 8, color: '#6b6b80' }}>{new Date(row.date + 'T00:00:00').getDate()}</div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Section Breakdown */}
+      {/* Workout Week */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>📈 % แต่ละด้าน</div>
-        {SECTION_KEYS.map(sec => {
-          const avg = activeRows.length
-            ? activeRows.reduce((s, r) => s + getSectionScore(r, sec.fields), 0) / activeRows.length
-            : 0;
-          return (
-            <div key={sec.key} style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13 }}>{sec.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: sec.color }}>{avg.toFixed(0)}%</span>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>💪 Workout สัปดาห์นี้</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+          {weekDates.map(date => {
+            const d = new Date(date + 'T00:00:00');
+            const done = rows.find(r => r.date === date)?.workout;
+            return (
+              <div key={date} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 9, color: '#6b6b80', marginBottom: 4 }}>{DAY_SHORT[d.getDay()]}</div>
+                <div style={{ width: '100%', aspectRatio: '1', borderRadius: 6, background: done ? '#ff6b35' : '#2a2a36', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                  {done ? '💪' : ''}
+                </div>
               </div>
-              <div style={{ height: 6, background: '#2a2a36', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${avg}%`, background: sec.color, borderRadius: 99, transition: 'width 0.6s' }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Heat Map */}
-      <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>🗓 Heat Map</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(5,1fr)', gap: 3, fontSize: 9, color: '#6b6b80', marginBottom: 4 }}>
-          <div/>
-          {SECTION_KEYS.map(s => <div key={s.key} style={{ textAlign: 'center' }}>{s.label.split(' ')[1]}</div>)}
+            );
+          })}
         </div>
-        {activeRows.filter(r => r.score > 0 || r.income > 0).slice(-14).map((row, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '44px repeat(5,1fr)', gap: 3, marginBottom: 3 }}>
-            <div style={{ fontSize: 9, color: '#6b6b80', display: 'flex', alignItems: 'center' }}>{getThaiShort(row.date)}</div>
-            {SECTION_KEYS.map(sec => {
-              const pct = getSectionScore(row, sec.fields);
-              const opacity = pct === 0 ? 0.08 : 0.2 + pct / 100 * 0.8;
-              return (
-                <div key={sec.key} style={{ height: 20, borderRadius: 4, background: sec.color, opacity }} />
-              );
-            })}
-          </div>
-        ))}
+        <div style={{ marginTop: 10, fontSize: 12, color: workoutDays >= 3 ? '#4ecdc4' : '#6b6b80', textAlign: 'center' }}>
+          {workoutDays >= 3 ? `✅ ${workoutDays} วัน — เป้าหมายสำเร็จ!` : `${workoutDays}/3 วัน — ต้องการอีก ${3 - workoutDays} วัน`}
+        </div>
       </div>
 
       {/* Finance */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>💰 การเงินรายวัน</div>
-        {activeRows.filter(r => r.income > 0 || r.expense > 0).map((row, i) => (
+        {activeRows.filter(r => r.income > 0 || r.expense > 0).slice(-10).map((row, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #2a2a36' }}>
             <div style={{ fontSize: 13, color: '#6b6b80' }}>{getThaiShort(row.date)}</div>
             <div style={{ display: 'flex', gap: 16 }}>
