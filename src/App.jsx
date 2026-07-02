@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 
-const PAGE_IDS = {}; // loaded from Notion
+const PAGE_IDS = {};
 
 const WALK_TARGET = 6500;
 const SLEEP_TARGET = 6;
+
+const LEARN_CATEGORIES = ["MOVE", "FUEL", "CONNECT", "GROW", "CREATE", "WEALTH"];
 
 const WORKOUT_GROUPS = [
   { id: "chest", icon: "💪", name: "อก", color: "#ff6b35", exercises: ["Bench Press", "Incline Press", "Cable Fly", "Dumbbell Fly", "Push Up"] },
@@ -15,18 +17,19 @@ const WORKOUT_GROUPS = [
 ];
 
 const SECTIONS = [
-  { id: "connect", icon: "🌐", name: "Connect", color: "#4ecdc4", score: 1, items: [
-    { id: "Line Friends 💬", label: "คุยไลน์เล่นกับเพื่อนๆ" },
-    { id: "Hangout 🤝", label: "ทำกิจกรรมกับเพื่อน" },
-    { id: "Event 🎉", label: "เข้าร่วม event/กิจกรรมใหม่" }
+  { id: "connect", icon: "🌐", name: "Connect", color: "#4ecdc4", items: [
+    { id: "Hangout 🤝", label: "ทำกิจกรรมกับเพื่อน", score: 1 },
+    { id: "Event 🎉", label: "เข้าร่วม event/กิจกรรมใหม่", score: 1 },
+    { id: "TikTok 🔥", label: "ดู TikTok เติมไฟ", score: 0.5 },
   ]},
-  { id: "grow", icon: "🧠", name: "Grow", color: "#a78bfa", score: 1, items: [
-    { id: "Podcast 🎧", label: "ฟัง Podcast" },
-    { id: "Bujo 📓", label: "บันทึก Bujo" }
+  { id: "grow", icon: "🧠", name: "Grow", color: "#a78bfa", items: [
+    { id: "Podcast 🎧", label: "ฟัง Podcast/เรียนรู้", score: 1 },
+    { id: "Bujo 📓", label: "บันทึก Bujo", score: 0.5 },
+    { id: "Learn 📚", label: "เรียนรู้ skill ใหม่", score: 1, requireDetail: true },
   ]},
-  { id: "create", icon: "🎨", name: "Create", color: "#f472b6", score: 1, items: [
-    { id: "Idea Content 💡", label: "จด idea content" },
-    { id: "Make Content ✂️", label: "ตัด/ทำ content" }
+  { id: "create", icon: "🎨", name: "Create", color: "#f472b6", items: [
+    { id: "Idea Content 💡", label: "จด idea content", score: 0.5 },
+    { id: "Post Real ✅", label: "โพสต์จริง", score: 1.5 },
   ]},
 ];
 
@@ -54,12 +57,10 @@ function getWeekDates() {
   });
 }
 
-const isStats = window.location.pathname === "/stats";
-
 export default function App() {
   const today = getTodayStr();
   const weekDates = getWeekDates();
-  const [page, setPage] = useState(isStats ? "stats" : "check");
+  const [page, setPage] = useState("check");
   const [selected, setSelected] = useState(today);
   const [checks, setChecks] = useState({});
   const [walkSteps, setWalkSteps] = useState({});
@@ -68,16 +69,12 @@ export default function App() {
   const [income, setIncome] = useState("");
   const [expense, setExpense] = useState("");
   const [status, setStatus] = useState(null);
+  const [learnCategory, setLearnCategory] = useState({});
+  const [learnDetail, setLearnDetail] = useState({});
+  const [showLearnModal, setShowLearnModal] = useState(false);
+  const [learnCatTemp, setLearnCatTemp] = useState("");
+  const [learnDetailTemp, setLearnDetailTemp] = useState("");
 
-  // Food
-  const [meals, setMeals] = useState({});
-  const [analyzingFood, setAnalyzingFood] = useState(false);
-  const [foodError, setFoodError] = useState(null);
-  const [foodDesc, setFoodDesc] = useState("");
-  const [pendingFile, setPendingFile] = useState(null);
-  const fileInputRef = useRef(null);
-
-  // Workout page state
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [workoutLog, setWorkoutLog] = useState({});
   const [customExercise, setCustomExercise] = useState("");
@@ -88,48 +85,33 @@ export default function App() {
   const [cardioMinutes, setCardioMinutes] = useState({});
   const [aiRecommend, setAiRecommend] = useState(null);
   const [loadingAI, setLoadingAI] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [pageIds, setPageIds] = useState({});
 
-  // ── Load data from Notion on mount ──
   useEffect(() => {
     fetch('/api/get-notion')
       .then(r => r.json())
       .then(data => {
         if (!data.rows) return;
-        const newChecks = {};
-        const newWalkSteps = {};
-        const newSleepHours = {};
-        const newWorkoutDone = {};
-        const newWorkoutLog = {};
-        const newPageIds = {};
-
+        const newChecks = {}, newWalkSteps = {}, newSleepHours = {}, newWorkoutDone = {}, newPageIds = {}, newLearnCat = {}, newLearnDetail = {};
         data.rows.forEach(row => {
           if (!row.date) return;
           if (row.pageId) newPageIds[row.date] = row.pageId;
           newChecks[row.date] = {
-            "Water 2L 💧": row.water,
-            "Egg 🥚": row.egg,
-            "Line Friends 💬": row.line,
-            "Hangout 🤝": row.hangout,
-            "Event 🎉": row.event,
-            "Podcast 🎧": row.podcast,
-            "Bujo 📓": row.bujo,
-            "Idea Content 💡": row.idea,
-            "Make Content ✂️": row.make,
+            "Hangout 🤝": row.hangout, "Event 🎉": row.event, "TikTok 🔥": row.tiktok,
+            "Podcast 🎧": row.podcast, "Bujo 📓": row.bujo, "Learn 📚": !!(row.learnCategory),
+            "Idea Content 💡": row.idea, "Post Real ✅": row.postReal,
+            "Water 2L 💧": row.water, "Egg 🥚": row.egg,
           };
           if (row.walkSteps) newWalkSteps[row.date] = String(row.walkSteps);
           if (row.sleepHours) newSleepHours[row.date] = String(row.sleepHours);
           if (row.workout) newWorkoutDone[row.date] = true;
+          if (row.learnCategory) newLearnCat[row.date] = row.learnCategory;
+          if (row.learnDetail) newLearnDetail[row.date] = row.learnDetail;
         });
-
-        setChecks(newChecks);
-        setWalkSteps(newWalkSteps);
-        setSleepHours(newSleepHours);
-        setWorkoutDone(newWorkoutDone);
-        setPageIds(newPageIds);
-        setWorkoutLog(newWorkoutLog);
+        setChecks(newChecks); setWalkSteps(newWalkSteps); setSleepHours(newSleepHours);
+        setWorkoutDone(newWorkoutDone); setPageIds(newPageIds);
+        setLearnCategory(newLearnCat); setLearnDetail(newLearnDetail);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -138,21 +120,41 @@ export default function App() {
   const dayChecks = checks[selected] || {};
   const steps = walkSteps[selected] || "";
   const sleep = sleepHours[selected] || "";
-  const dayMeals = meals[selected] || [];
-  const totalCalories = dayMeals.reduce((s, m) => s + (m.total_calories || m.total || 0), 0);
   const isWorkoutToday = workoutDone[selected] || false;
 
-  // Scoring
   const walkScore = steps ? Math.min(0.5, parseInt(steps) / WALK_TARGET * 0.5) : 0;
   const sleepScore = sleep ? Math.min(0.5, parseFloat(sleep) / SLEEP_TARGET * 0.5) : 0;
-  const workoutScore = isWorkoutToday ? 1 : 0;
+  const workoutScore = isWorkoutToday ? 2 : 0;
   const waterScore = dayChecks["Water 2L 💧"] ? 0.5 : 0;
   const eggScore = dayChecks["Egg 🥚"] ? 0.5 : 0;
-  const checkScore = ALL_ITEMS.filter(item => dayChecks[item.id]).length;
-  const scoreDisplay = parseFloat((walkScore + sleepScore + workoutScore + waterScore + eggScore + checkScore).toFixed(1));
+  const sectionScore = ALL_ITEMS.reduce((sum, item) => sum + (dayChecks[item.id] ? (item.score || 1) : 0), 0);
+  const scoreDisplay = parseFloat((walkScore + sleepScore + workoutScore + waterScore + eggScore + sectionScore).toFixed(1));
 
   const toggle = (itemId) => {
+    const item = ALL_ITEMS.find(i => i.id === itemId);
+    if (item?.requireDetail) {
+      if (!dayChecks[itemId]) {
+        setLearnCatTemp(learnCategory[selected] || "");
+        setLearnDetailTemp(learnDetail[selected] || "");
+        setShowLearnModal(true);
+      } else {
+        setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], [itemId]: false } }));
+        setLearnCategory(prev => { const n = {...prev}; delete n[selected]; return n; });
+        setLearnDetail(prev => { const n = {...prev}; delete n[selected]; return n; });
+        setStatus(null);
+      }
+      return;
+    }
     setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], [itemId]: !prev[selected]?.[itemId] } }));
+    setStatus(null);
+  };
+
+  const confirmLearn = () => {
+    if (!learnCatTemp || learnDetailTemp.trim().length < 5) return;
+    setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], "Learn 📚": true } }));
+    setLearnCategory(prev => ({ ...prev, [selected]: learnCatTemp }));
+    setLearnDetail(prev => ({ ...prev, [selected]: learnDetailTemp.trim() }));
+    setShowLearnModal(false);
     setStatus(null);
   };
 
@@ -160,56 +162,17 @@ export default function App() {
     const d = checks[date] || {};
     const w = walkSteps[date] ? Math.min(0.5, parseInt(walkSteps[date]) / WALK_TARGET * 0.5) : 0;
     const sl = sleepHours[date] ? Math.min(0.5, parseFloat(sleepHours[date]) / SLEEP_TARGET * 0.5) : 0;
-    const wo = workoutDone[date] ? 1 : 0;
+    const wo = workoutDone[date] ? 2 : 0;
     const water = d["Water 2L 💧"] ? 0.5 : 0;
     const egg = d["Egg 🥚"] ? 0.5 : 0;
-    return w + sl + wo + water + egg + ALL_ITEMS.filter(item => d[item.id]).length;
+    const sec = ALL_ITEMS.reduce((sum, item) => sum + (d[item.id] ? (item.score || 1) : 0), 0);
+    return w + sl + wo + water + egg + sec;
   };
-
-  const analyzeFood = async (file, desc) => {
-    setAnalyzingFood(true);
-    setFoodError(null);
-    try {
-      const doAnalyze = async (imageBase64, mediaType) => {
-        const res = await fetch('/api/analyze-food', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64, mediaType, description: desc }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setMeals(prev => ({ ...prev, [selected]: [...(prev[selected] || []), { ...data, time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) }] }));
-          setFoodDesc(""); setPendingFile(null);
-        } else { setFoodError('วิเคราะห์ไม่ได้ ลองใหม่'); }
-        setAnalyzingFood(false);
-      };
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const img = new Image();
-          img.onload = async () => {
-            const canvas = document.createElement('canvas');
-            const MAX = 800;
-            let w = img.width, h = img.height;
-            if (w > h && w > MAX) { h = h * MAX / w; w = MAX; } else if (h > MAX) { w = w * MAX / h; h = MAX; }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            await doAnalyze(canvas.toDataURL('image/jpeg', 0.7).split(',')[1], 'image/jpeg');
-          };
-          img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-      } else { await doAnalyze(null, null); }
-    } catch (e) { setFoodError('เกิดข้อผิดพลาด'); setAnalyzingFood(false); }
-  };
-
-  const removeMeal = (index) => setMeals(prev => ({ ...prev, [selected]: prev[selected].filter((_, i) => i !== index) }));
 
   const addSet = (exercise) => {
     setWorkoutLog(prev => {
       const dayLog = prev[selected] || {};
-      const sets = dayLog[exercise] || [];
-      return { ...prev, [selected]: { ...dayLog, [exercise]: [...sets, { sets: "3", reps: "10", kg: "" }] } };
+      return { ...prev, [selected]: { ...dayLog, [exercise]: [...(dayLog[exercise] || []), { sets: "3", reps: "10", kg: "" }] } };
     });
   };
 
@@ -225,32 +188,18 @@ export default function App() {
   const removeSet = (exercise, idx) => {
     setWorkoutLog(prev => {
       const dayLog = prev[selected] || {};
-      const sets = (dayLog[exercise] || []).filter((_, i) => i !== idx);
-      return { ...prev, [selected]: { ...dayLog, [exercise]: sets } };
+      return { ...prev, [selected]: { ...dayLog, [exercise]: (dayLog[exercise] || []).filter((_, i) => i !== idx) } };
     });
   };
 
   const getAIRecommend = async (group) => {
-    setLoadingAI(true);
-    setAiRecommend(null);
+    setLoadingAI(true); setAiRecommend(null);
     try {
       const history = Object.entries(workoutLog)
         .filter(([, log]) => Object.keys(log).some(k => group.exercises.includes(k)))
-        .sort(([a], [b]) => b.localeCompare(a))
-        .slice(0, 5)
-        .map(([date, log]) => ({
-          date: getThaiDate(date),
-          log: Object.entries(log)
-            .filter(([k]) => group.exercises.includes(k))
-            .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? '@' + s.kg + 'kg' : ''}`).join(', ')}`)
-            .join(' | ')
-        }));
-
-      const res = await fetch('/api/recommend-workout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ muscleGroup: group.name, history })
-      });
+        .sort(([a], [b]) => b.localeCompare(a)).slice(0, 5)
+        .map(([date, log]) => ({ date: getThaiDate(date), log: Object.entries(log).filter(([k]) => group.exercises.includes(k)).map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? '@' + s.kg + 'kg' : ''}`).join(', ')}`).join(' | ') }));
+      const res = await fetch('/api/recommend-workout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ muscleGroup: group.name, history }) });
       const data = await res.json();
       if (res.ok) setAiRecommend(data.exercises || []);
     } catch (e) { console.error(e); }
@@ -258,58 +207,49 @@ export default function App() {
   };
 
   const getLastSession = (exercise) => {
-    const dates = Object.keys(workoutLog).sort().reverse();
-    for (const date of dates) {
+    for (const date of Object.keys(workoutLog).sort().reverse()) {
       if (date === selected) continue;
       const sets = workoutLog[date]?.[exercise];
-      if (sets && sets.length > 0) return { date, sets };
+      if (sets?.length > 0) return { date, sets };
     }
     return null;
   };
 
   const calcWorkoutCalories = (date) => {
-    const weightMin = workoutMinutes[date] || 0;
-    const cardioMin = cardioMinutes[date] || 0;
-    const weightCal = weightMin > 0 ? Math.round(5 * bodyWeight * (weightMin / 60)) : 0;
-    const cardioCal = cardioMin > 0 ? Math.round(8 * bodyWeight * (cardioMin / 60)) : 0;
-    return { weight: weightCal, cardio: cardioCal, total: weightCal + cardioCal };
+    const wMin = workoutMinutes[date] || 0, cMin = cardioMinutes[date] || 0;
+    return { weight: wMin > 0 ? Math.round(5 * bodyWeight * (wMin / 60)) : 0, cardio: cMin > 0 ? Math.round(8 * bodyWeight * (cMin / 60)) : 0, total: (wMin > 0 ? Math.round(5 * bodyWeight * (wMin / 60)) : 0) + (cMin > 0 ? Math.round(8 * bodyWeight * (cMin / 60)) : 0) };
   };
 
-  // ── Submit to Notion ──
   const submit = async () => {
     setStatus("loading");
     try {
       const pageId = pageIds[selected] || PAGE_IDS[selected];
       if (!pageId) { setStatus("error"); return; }
-
-      const properties = {};
-      ALL_ITEMS.forEach(item => { properties[item.id] = { checkbox: !!dayChecks[item.id] }; });
-      properties["Water 2L 💧"] = { checkbox: !!dayChecks["Water 2L 💧"] };
-      properties["Egg 🥚"] = { checkbox: !!dayChecks["Egg 🥚"] };
-      properties["Walk 8k 👟"] = { checkbox: steps ? parseInt(steps) >= WALK_TARGET : false };
-      properties["Sleep 6h 😴"] = { checkbox: sleep ? parseFloat(sleep) >= 6 : false };
-      properties["Workout 💪"] = { checkbox: isWorkoutToday };
-
+      const properties = {
+        "Hangout 🤝": { checkbox: !!dayChecks["Hangout 🤝"] },
+        "Event 🎉": { checkbox: !!dayChecks["Event 🎉"] },
+        "TikTok 🔥": { checkbox: !!dayChecks["TikTok 🔥"] },
+        "Podcast 🎧": { checkbox: !!dayChecks["Podcast 🎧"] },
+        "Bujo 📓": { checkbox: !!dayChecks["Bujo 📓"] },
+        "Idea Content 💡": { checkbox: !!dayChecks["Idea Content 💡"] },
+        "Post Real ✅": { checkbox: !!dayChecks["Post Real ✅"] },
+        "Water 2L 💧": { checkbox: !!dayChecks["Water 2L 💧"] },
+        "Egg 🥚": { checkbox: !!dayChecks["Egg 🥚"] },
+        "Walk 8k 👟": { checkbox: steps ? parseInt(steps) >= WALK_TARGET : false },
+        "Sleep 6h 😴": { checkbox: sleep ? parseFloat(sleep) >= 6 : false },
+        "Workout 💪": { checkbox: isWorkoutToday },
+        "Daily Score": { number: scoreDisplay },
+      };
       if (steps) properties["Walk Steps"] = { number: parseInt(steps) };
       if (sleep) properties["Sleep Hours"] = { number: parseFloat(sleep) };
-      properties["Daily Score"] = { number: scoreDisplay };
-
       if (income) properties["รายรับ 💰"] = { number: parseFloat(income) };
       if (expense) properties["รายจ่าย 💸"] = { number: parseFloat(expense) };
-      if (totalCalories > 0) properties["แคลอรี่ 🔥"] = { number: totalCalories };
-
-      const dayLog = workoutLog[selected] || {};
-      const workoutSummary = Object.entries(dayLog)
-        .filter(([, sets]) => sets.length > 0)
-        .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}`)
-        .join(' | ');
+      if (learnCategory[selected]) properties["Learn Category"] = { select: { name: learnCategory[selected] } };
+      if (learnDetail[selected]) properties["Learn Detail"] = { rich_text: [{ text: { content: learnDetail[selected] } }] };
+      const workoutSummary = Object.entries(workoutLog[selected] || {}).filter(([, sets]) => sets.length > 0)
+        .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}`).join(' | ');
       if (workoutSummary) properties["Workout Log 📝"] = { rich_text: [{ text: { content: workoutSummary } }] };
-
-      const res = await fetch("/api/update-notion", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageId, properties })
-      });
+      const res = await fetch("/api/update-notion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageId, properties }) });
       if (res.ok) { setStatus("success"); } else { setStatus("error"); }
     } catch (e) { setStatus("error"); }
   };
@@ -317,7 +257,6 @@ export default function App() {
   // ── WORKOUT PAGE ──
   if (page === "workout") {
     const dayLog = workoutLog[selected] || {};
-
     return (
       <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 20, position: "relative" }}>
@@ -325,75 +264,49 @@ export default function App() {
           <div style={{ fontSize: 22, fontWeight: 700 }}>{getThaiDate(selected)}</div>
           <div onClick={() => setShowSettings(!showSettings)} style={{ position: "absolute", right: 0, top: 0, fontSize: 20, cursor: "pointer" }}>⚙️</div>
         </div>
-
         {showSettings && (
           <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>⚙️ ตั้งค่า</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 13, color: "#6b6b80", flexShrink: 0 }}>น้ำหนักตัว (kg)</span>
-              <input type="number" value={bodyWeight}
-                onChange={e => { const v = parseFloat(e.target.value); if (v > 0) { setBodyWeight(v); localStorage.setItem("bodyWeight", v); } }}
+              <input type="number" value={bodyWeight} onChange={e => { const v = parseFloat(e.target.value); if (v > 0) { setBodyWeight(v); localStorage.setItem("bodyWeight", v); } }}
                 style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
               <span style={{ fontSize: 13, color: "#6b6b80" }}>kg</span>
             </div>
           </div>
         )}
-
         <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, color: "#6b6b80" }}>⏱️ เวลา workout วันนี้</span>
-            <input type="number" value={workoutMinutes[selected] || ""}
-              onChange={e => setWorkoutMinutes(prev => ({ ...prev, [selected]: parseInt(e.target.value) || 0 }))}
-              placeholder="0"
+            <input type="number" value={workoutMinutes[selected] || ""} onChange={e => setWorkoutMinutes(prev => ({ ...prev, [selected]: parseInt(e.target.value) || 0 }))} placeholder="0"
               style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
             <span style={{ fontSize: 13, color: "#6b6b80" }}>นาที</span>
           </div>
-          {workoutMinutes[selected] > 0 && (
-            <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b35", textAlign: "center" }}>
-              🔥 เผาผลาญประมาณ {calcWorkoutCalories(selected).weight} kcal
-            </div>
-          )}
+          {workoutMinutes[selected] > 0 && <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b35", textAlign: "center" }}>🔥 {calcWorkoutCalories(selected).weight} kcal</div>}
         </div>
-
-        {selectedGroup?.isCardio && (
+        {selectedGroup?.isCardio ? (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <button onClick={() => setSelectedGroup(null)} style={{ background: "#17171f", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", cursor: "pointer", fontSize: 13 }}>← กลับ</button>
               <span style={{ fontSize: 18, fontWeight: 700, color: "#4ecdc4" }}>🏃 Cardio</span>
             </div>
             <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px" }}>
-              <div style={{ fontSize: 13, color: "#6b6b80", marginBottom: 12 }}>ประเภท Cardio</div>
-              {["วิ่ง", "ปั่นจักรยาน", "ว่ายน้ำ", "Rowing", "Jump Rope", "Elliptical"].map(type => (
-                <div key={type} style={{ fontSize: 13, color: "#f0f0f5", padding: "8px 0", borderBottom: "1px solid #2a2a36" }}>{type}</div>
-              ))}
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>⏱️ เวลา Cardio (นาที)</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input type="number" value={cardioMinutes[selected] || ""}
-                    onChange={e => setCardioMinutes(prev => ({ ...prev, [selected]: parseInt(e.target.value) || 0 }))}
-                    placeholder="0"
-                    style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 20, outline: "none", textAlign: "center" }} />
-                  <span style={{ fontSize: 13, color: "#6b6b80" }}>นาที</span>
-                </div>
-                {cardioMinutes[selected] > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 14, color: "#4ecdc4", textAlign: "center", fontWeight: 700 }}>
-                    🔥 {Math.round(8 * bodyWeight * (cardioMinutes[selected] / 60))} kcal
-                  </div>
-                )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input type="number" value={cardioMinutes[selected] || ""} onChange={e => setCardioMinutes(prev => ({ ...prev, [selected]: parseInt(e.target.value) || 0 }))} placeholder="0"
+                  style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 20, outline: "none", textAlign: "center" }} />
+                <span style={{ fontSize: 13, color: "#6b6b80" }}>นาที</span>
               </div>
+              {cardioMinutes[selected] > 0 && <div style={{ marginTop: 8, fontSize: 14, color: "#4ecdc4", textAlign: "center", fontWeight: 700 }}>🔥 {Math.round(8 * bodyWeight * (cardioMinutes[selected] / 60))} kcal</div>}
             </div>
           </div>
-        )}
-
-        {!selectedGroup ? (
+        ) : !selectedGroup ? (
           <>
             <div style={{ fontSize: 13, color: "#6b6b80", marginBottom: 16, textAlign: "center" }}>เลือก Muscle Group</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               {WORKOUT_GROUPS.map(g => {
                 const hasLog = Object.keys(dayLog).some(k => g.exercises.includes(k) && dayLog[k].length > 0);
                 return (
-                  <div key={g.id} onClick={() => { setSelectedGroup(g); }}
-                    style={{ background: "#17171f", borderRadius: 16, border: `1px solid ${hasLog ? g.color : "#2a2a36"}`, padding: "20px 16px", cursor: "pointer", textAlign: "center" }}>
+                  <div key={g.id} onClick={() => setSelectedGroup(g)} style={{ background: "#17171f", borderRadius: 16, border: `1px solid ${hasLog ? g.color : "#2a2a36"}`, padding: "20px 16px", cursor: "pointer", textAlign: "center" }}>
                     <div style={{ fontSize: 28, marginBottom: 6 }}>{g.icon}</div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: g.color }}>{g.name}</div>
                     {hasLog && <div style={{ fontSize: 10, color: g.color, marginTop: 4 }}>✅ มีข้อมูล</div>}
@@ -407,12 +320,10 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
               <button onClick={() => { setSelectedGroup(null); setAiRecommend(null); }} style={{ background: "#17171f", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", cursor: "pointer", fontSize: 13 }}>← กลับ</button>
               <span style={{ fontSize: 18, fontWeight: 700, color: selectedGroup.color }}>{selectedGroup.icon} {selectedGroup.name}</span>
-              <button onClick={() => getAIRecommend(selectedGroup)} disabled={loadingAI}
-                style={{ marginLeft: "auto", background: "#a78bfa", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: loadingAI ? 0.6 : 1 }}>
+              <button onClick={() => getAIRecommend(selectedGroup)} disabled={loadingAI} style={{ marginLeft: "auto", background: "#a78bfa", border: "none", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: loadingAI ? 0.6 : 1 }}>
                 {loadingAI ? "⏳..." : "🤖 แนะนำ"}
               </button>
             </div>
-
             {aiRecommend && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #a78bfa", padding: "14px 16px", marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 12 }}>🤖 AI แนะนำวันนี้</div>
@@ -420,21 +331,14 @@ export default function App() {
                   <div key={i} style={{ marginBottom: 10, padding: "10px 12px", background: "#0e0e12", borderRadius: 10, border: "1px solid #2a2a36" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 14, fontWeight: 700 }}>{ex.name}</span>
-                      <button onClick={() => {
-                        const sets = Array(parseInt(ex.sets) || 3).fill(null).map(() => ({ sets: ex.sets, reps: ex.reps, kg: ex.kg || '' }));
-                        setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected] || {}), [ex.name]: sets } }));
-                      }} style={{ background: selectedGroup.color, border: "none", borderRadius: 6, padding: "4px 10px", color: "#0e0e12", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ เพิ่ม</button>
+                      <button onClick={() => { const sets = Array(parseInt(ex.sets)||3).fill(null).map(() => ({ sets: ex.sets, reps: ex.reps, kg: ex.kg||'' })); setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected]||{}), [ex.name]: sets } })); }} style={{ background: selectedGroup.color, border: "none", borderRadius: 6, padding: "4px 10px", color: "#0e0e12", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>+ เพิ่ม</button>
                     </div>
-                    <div style={{ fontSize: 12, color: "#6b6b80", marginTop: 4 }}>
-                      {ex.sets} sets × {ex.reps} reps {ex.kg ? `@ ${ex.kg}kg` : ''}
-                      {ex.lastSession && <span> · ครั้งล่าสุด: {ex.lastSession}</span>}
-                    </div>
+                    <div style={{ fontSize: 12, color: "#6b6b80", marginTop: 4 }}>{ex.sets} sets × {ex.reps} reps {ex.kg ? `@ ${ex.kg}kg` : ''}</div>
                     {ex.note && <div style={{ fontSize: 11, color: "#a78bfa", marginTop: 2 }}>💡 {ex.note}</div>}
                   </div>
                 ))}
               </div>
             )}
-
             {selectedGroup.exercises.concat(customExercises[selectedGroup.id] || []).map(ex => {
               const sets = dayLog[ex] || [];
               const last = getLastSession(ex);
@@ -443,29 +347,21 @@ export default function App() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
                     <div>
                       <span style={{ fontSize: 14, fontWeight: 700 }}>{ex}</span>
-                      {last && <div style={{ fontSize: 10, color: "#6b6b80", marginTop: 2 }}>
-                        ครั้งล่าสุด {getThaiDate(last.date).split(' ').slice(1).join(' ')}: {last.sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}
-                      </div>}
+                      {last && <div style={{ fontSize: 10, color: "#6b6b80", marginTop: 2 }}>ครั้งล่าสุด: {last.sets.map(s => `${s.sets}x${s.reps}${s.kg?`@${s.kg}kg`:''}`).join(', ')}</div>}
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      {last && sets.length === 0 && <button onClick={() => {
-                        setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected] || {}), [ex]: last.sets.map(s => ({ ...s })) } }));
-                      }} style={{ background: "transparent", border: `1px solid ${selectedGroup.color}`, borderRadius: 8, padding: "6px 10px", color: selectedGroup.color, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>ใช้เหมือนเดิม</button>}
+                      {last && sets.length === 0 && <button onClick={() => setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected]||{}), [ex]: last.sets.map(s=>({...s})) } }))} style={{ background: "transparent", border: `1px solid ${selectedGroup.color}`, borderRadius: 8, padding: "6px 10px", color: selectedGroup.color, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>ใช้เหมือนเดิม</button>}
                       <button onClick={() => addSet(ex)} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "6px 12px", color: "#0e0e12", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Set</button>
                     </div>
                   </div>
                   {sets.length > 0 && (
                     <div style={{ padding: "0 16px 12px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 24px", gap: 6, marginBottom: 6 }}>
-                        {["Sets", "Reps", "kg", ""].map(h => <div key={h} style={{ fontSize: 10, color: "#6b6b80", textAlign: "center" }}>{h}</div>)}
+                        {["Sets","Reps","kg",""].map(h => <div key={h} style={{ fontSize: 10, color: "#6b6b80", textAlign: "center" }}>{h}</div>)}
                       </div>
                       {sets.map((set, idx) => (
                         <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 24px", gap: 6, marginBottom: 6 }}>
-                          {["sets", "reps", "kg"].map(field => (
-                            <input key={field} type="number" value={set[field]} onChange={e => updateSet(ex, idx, field, e.target.value)}
-                              placeholder={field === "kg" ? "kg" : field}
-                              style={{ background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 6, padding: "8px", color: "#f0f0f5", fontSize: 14, outline: "none", textAlign: "center", width: "100%", boxSizing: "border-box" }} />
-                          ))}
+                          {["sets","reps","kg"].map(field => <input key={field} type="number" value={set[field]} onChange={e => updateSet(ex, idx, field, e.target.value)} style={{ background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 6, padding: "8px", color: "#f0f0f5", fontSize: 14, outline: "none", textAlign: "center", width: "100%", boxSizing: "border-box" }} />)}
                           <div onClick={() => removeSet(ex, idx)} style={{ display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#6b6b80", fontSize: 14 }}>✕</div>
                         </div>
                       ))}
@@ -474,43 +370,25 @@ export default function App() {
                 </div>
               );
             })}
-
             <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>➕ เพิ่มท่าเอง</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input type="text" value={customExercise} onChange={e => setCustomExercise(e.target.value)} placeholder="ชื่อท่า..."
-                  style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 14, outline: "none" }} />
-                <button onClick={() => {
-                  if (customExercise.trim()) {
-                    const name = customExercise.trim();
-                    setCustomExercises(prev => ({ ...prev, [selectedGroup.id]: [...(prev[selectedGroup.id] || []), name] }));
-                    addSet(name);
-                    setCustomExercise("");
-                  }
-                }} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "10px 14px", color: "#0e0e12", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>เพิ่ม</button>
+                <input type="text" value={customExercise} onChange={e => setCustomExercise(e.target.value)} placeholder="ชื่อท่า..." style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "10px 12px", color: "#f0f0f5", fontSize: 14, outline: "none" }} />
+                <button onClick={() => { if (customExercise.trim()) { const name = customExercise.trim(); setCustomExercises(prev => ({ ...prev, [selectedGroup.id]: [...(prev[selectedGroup.id]||[]), name] })); addSet(name); setCustomExercise(""); } }} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "10px 14px", color: "#0e0e12", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>เพิ่ม</button>
               </div>
             </div>
-
             {calcWorkoutCalories(selected).total > 0 && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #ff6b35", padding: "14px 16px", marginBottom: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 4 }}>🔥 พลังงานที่ใช้ (ประมาณการ)</div>
+                <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 4 }}>🔥 พลังงานที่ใช้</div>
                 <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{calcWorkoutCalories(selected).total} kcal</div>
-                {calcWorkoutCalories(selected).cardio > 0 && <div style={{ fontSize: 11, color: "#6b6b80" }}>Cardio {calcWorkoutCalories(selected).cardio} + Weights {calcWorkoutCalories(selected).weight}</div>}
               </div>
             )}
           </>
         )}
-
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
-          <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-            <span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span>
-          </div>
-          <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}>
-            <span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span>
-          </div>
-          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-            <span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span>
-          </div>
+          <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
+          <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
+          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
         </div>
       </div>
     );
@@ -523,7 +401,6 @@ export default function App() {
     const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
     const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
     const workoutDays = weekDates.filter(d => workoutDone[d]).length;
-
     return (
       <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -531,11 +408,7 @@ export default function App() {
           <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวมเดือนนี้</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
-          {[
-            { label: "เฉลี่ยต่อวัน", value: avg, unit: `/ ${TOTAL}` },
-            { label: "วันที่ดีสุด", value: best.score.toFixed(1), unit: best.date ? best.date.slice(5) : "-" },
-            { label: "Workout สัปดาห์นี้", value: workoutDays, unit: "วัน", color: workoutDays >= 3 ? "#4ecdc4" : "#f7c948" },
-          ].map(card => (
+          {[{ label: "เฉลี่ยต่อวัน", value: avg, unit: `/ ${TOTAL}` }, { label: "วันที่ดีสุด", value: best.score?.toFixed(1), unit: best.date ? best.date.slice(5) : "-" }, { label: "Workout สัปดาห์นี้", value: workoutDays, unit: "วัน", color: workoutDays >= 3 ? "#4ecdc4" : "#f7c948" }].map(card => (
             <div key={card.label} style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "12px" }}>
               <div style={{ fontSize: 10, color: "#6b6b80", marginBottom: 6 }}>{card.label}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: card.color || "#f0f0f5" }}>{card.value}</div>
@@ -567,9 +440,7 @@ export default function App() {
               return (
                 <div key={date} style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: "#6b6b80", marginBottom: 4 }}>{DAY_SHORT[d.getDay()]}</div>
-                  <div style={{ width: "100%", aspectRatio: "1", borderRadius: 6, background: done ? "#ff6b35" : "#2a2a36", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
-                    {done ? "💪" : ""}
-                  </div>
+                  <div style={{ width: "100%", aspectRatio: "1", borderRadius: 6, background: done ? "#ff6b35" : "#2a2a36", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{done ? "💪" : ""}</div>
                 </div>
               );
             })}
@@ -578,17 +449,10 @@ export default function App() {
             {workoutDays >= 3 ? `✅ ${workoutDays} วัน — เป้าหมายสำเร็จ!` : `${workoutDays}/3 วัน — ต้องการอีก ${3 - workoutDays} วัน`}
           </div>
         </div>
-
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
-          <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-            <span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span>
-          </div>
-          <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-            <span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span>
-          </div>
-          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}>
-            <span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span>
-          </div>
+          <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
+          <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
+          <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
         </div>
       </div>
     );
@@ -604,6 +468,35 @@ export default function App() {
 
   return (
     <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
+
+      {/* Learn Modal */}
+      {showLearnModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#17171f", borderRadius: 20, border: "1px solid #2a2a36", padding: 24, width: "100%", maxWidth: 400 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>📚 เรียนรู้อะไรวันนี้?</div>
+            <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>เลือก Category</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {LEARN_CATEGORIES.map(cat => (
+                <div key={cat} onClick={() => setLearnCatTemp(cat)}
+                  style={{ padding: "8px", borderRadius: 10, border: `1px solid ${learnCatTemp === cat ? "#a78bfa" : "#2a2a36"}`, background: learnCatTemp === cat ? "rgba(167,139,250,0.15)" : "#0e0e12", textAlign: "center", cursor: "pointer", fontSize: 12, fontWeight: 700, color: learnCatTemp === cat ? "#a78bfa" : "#6b6b80" }}>
+                  {cat}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>เรียนรู้เรื่องอะไร? (อย่างน้อย 5 ตัวอักษร)</div>
+            <textarea value={learnDetailTemp} onChange={e => setLearnDetailTemp(e.target.value)} placeholder="เช่น เรียน affiliate marketing จาก YouTube..."
+              style={{ width: "100%", background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 10, padding: "10px 12px", color: "#f0f0f5", fontSize: 13, outline: "none", resize: "none", height: 80, boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={() => setShowLearnModal(false)} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid #2a2a36", background: "transparent", color: "#6b6b80", fontSize: 14, cursor: "pointer" }}>ยกเลิก</button>
+              <button onClick={confirmLearn} disabled={!learnCatTemp || learnDetailTemp.trim().length < 5}
+                style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: (!learnCatTemp || learnDetailTemp.trim().length < 5) ? "#2a2a36" : "#a78bfa", color: "#fff", fontSize: 14, fontWeight: 700, cursor: (!learnCatTemp || learnDetailTemp.trim().length < 5) ? "not-allowed" : "pointer" }}>
+                ✓ บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ textAlign: "center", marginBottom: 20, position: "relative" }}>
         <div onClick={() => setShowSettings(!showSettings)} style={{ position: "absolute", right: 0, top: 0, fontSize: 18, cursor: "pointer" }}>⚙️</div>
         <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>DAILY TRACKER</div>
@@ -620,8 +513,7 @@ export default function App() {
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>⚙️ ตั้งค่า</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, color: "#6b6b80", flexShrink: 0 }}>น้ำหนักตัว</span>
-            <input type="number" value={bodyWeight}
-              onChange={e => { const v = parseFloat(e.target.value); if (v > 0) { setBodyWeight(v); localStorage.setItem("bodyWeight", v); } }}
+            <input type="number" value={bodyWeight} onChange={e => { const v = parseFloat(e.target.value); if (v > 0) { setBodyWeight(v); localStorage.setItem("bodyWeight", v); } }}
               style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
             <span style={{ fontSize: 13, color: "#6b6b80" }}>kg</span>
           </div>
@@ -632,35 +524,26 @@ export default function App() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 5, marginBottom: 20 }}>
         {weekDates.map((date) => {
           const d = new Date(date + "T00:00:00");
-          const isActive = date === selected;
-          const isToday = date === today;
-          const sc = getDayScore(date);
-          const dots = Math.min(3, Math.round(sc / TOTAL * 3.5));
+          const isActive = date === selected, isToday = date === today;
+          const sc = getDayScore(date), dots = Math.min(3, Math.round(sc / TOTAL * 3.5));
           return (
             <div key={date} onClick={() => { setSelected(date); setStatus(null); setIncome(""); setExpense(""); }}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 4px", borderRadius: 10, border: `1px solid ${isActive ? "#f0f0f5" : "#2a2a36"}`, background: isActive ? "#f0f0f5" : "#17171f", cursor: "pointer", userSelect: "none" }}>
               <div style={{ fontSize: 10, color: isActive ? "#0e0e12" : "#6b6b80" }}>{DAY_SHORT[d.getDay()]}{isToday ? "·" : ""}</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: isActive ? "#0e0e12" : "#f0f0f5" }}>{d.getDate()}</div>
-              <div style={{ display: "flex", gap: 2 }}>
-                {[0,1,2].map(i => <div key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: isActive ? (i < dots ? "#0e0e12" : "rgba(0,0,0,0.15)") : (i < dots ? "#f0f0f5" : "#2a2a36") }} />)}
-              </div>
+              <div style={{ display: "flex", gap: 2 }}>{[0,1,2].map(i => <div key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: isActive ? (i < dots ? "#0e0e12" : "rgba(0,0,0,0.15)") : (i < dots ? "#f0f0f5" : "#2a2a36") }} />)}</div>
             </div>
           );
         })}
       </div>
 
-      {/* Move Section */}
+      {/* MOVE */}
       <div style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 16 }}>🔥</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#ff6b35" }}>Move</span>
-          </div>
-          <span style={{ fontSize: 11, color: "#6b6b80" }}>{(walkScore + sleepScore + workoutScore).toFixed(1)} / 2 คะแนน</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 16 }}>🔥</span><span style={{ fontSize: 14, fontWeight: 700, color: "#ff6b35" }}>Move</span></div>
+          <span style={{ fontSize: 11, color: "#6b6b80" }}>{(walkScore + sleepScore + workoutScore).toFixed(1)} / 3 คะแนน</span>
         </div>
         <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
-
-        {/* Walk */}
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>👟 จำนวนก้าววันนี้ (เต็ม 0.5)</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -671,12 +554,8 @@ export default function App() {
           <div style={{ marginTop: 8, height: 4, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${Math.min(100, walkScore / 0.5 * 100)}%`, background: "#ff6b35", borderRadius: 99, transition: "width 0.3s" }} />
           </div>
-          {steps && <div style={{ marginTop: 4, fontSize: 11, color: parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#6b6b80" }}>
-            {parseInt(steps) >= WALK_TARGET ? "✅ ถึงเป้าแล้ว! (+0.5)" : `ขาดอีก ${(WALK_TARGET - parseInt(steps)).toLocaleString()} ก้าว · +${walkScore.toFixed(2)}`}
-          </div>}
+          {steps && <div style={{ marginTop: 4, fontSize: 11, color: parseInt(steps) >= WALK_TARGET ? "#ff6b35" : "#6b6b80" }}>{parseInt(steps) >= WALK_TARGET ? "✅ ถึงเป้าแล้ว! (+0.5)" : `ขาดอีก ${(WALK_TARGET - parseInt(steps)).toLocaleString()} ก้าว`}</div>}
         </div>
-
-        {/* Sleep */}
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>😴 นอนกี่ชั่วโมง (เต็ม 0.5)</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -687,27 +566,20 @@ export default function App() {
           <div style={{ marginTop: 8, height: 4, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${Math.min(100, sleepScore / 0.5 * 100)}%`, background: "#ff6b35", borderRadius: 99, transition: "width 0.3s" }} />
           </div>
-          {sleep && <div style={{ marginTop: 4, fontSize: 11, color: parseFloat(sleep) >= SLEEP_TARGET ? "#ff6b35" : "#6b6b80" }}>
-            {parseFloat(sleep) >= SLEEP_TARGET ? "✅ นอนครบแล้ว! (+0.5)" : `+${sleepScore.toFixed(2)} คะแนน`}
-          </div>}
+          {sleep && <div style={{ marginTop: 4, fontSize: 11, color: parseFloat(sleep) >= SLEEP_TARGET ? "#ff6b35" : "#6b6b80" }}>{parseFloat(sleep) >= SLEEP_TARGET ? "✅ นอนครบแล้ว! (+0.5)" : `+${sleepScore.toFixed(2)} คะแนน`}</div>}
         </div>
-
-        {/* Workout checkbox */}
         <div onClick={() => { setWorkoutDone(prev => ({ ...prev, [selected]: !prev[selected] })); setStatus(null); }}
           style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, border: `1px solid ${isWorkoutToday ? "transparent" : "#2a2a36"}`, background: isWorkoutToday ? "rgba(255,107,53,0.08)" : "#0e0e12", transition: "all 0.2s", userSelect: "none" }}>
           <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: isWorkoutToday ? "#ff6b35" : "transparent", border: `2px solid ${isWorkoutToday ? "#ff6b35" : "#2a2a36"}`, color: isWorkoutToday ? "#fff" : "transparent", transition: "all 0.2s" }}>✓</div>
-          <span style={{ fontSize: 14, color: isWorkoutToday ? "#6b6b80" : "#f0f0f5", textDecoration: isWorkoutToday ? "line-through" : "none" }}>💪 ออกกำลังกายวันนี้ (+1)</span>
+          <span style={{ fontSize: 14, color: isWorkoutToday ? "#6b6b80" : "#f0f0f5", textDecoration: isWorkoutToday ? "line-through" : "none" }}>💪 ออกกำลังกายวันนี้ (+2)</span>
           {isWorkoutToday && <button onClick={e => { e.stopPropagation(); setPage("workout"); }} style={{ marginLeft: "auto", background: "#ff6b35", border: "none", borderRadius: 6, padding: "4px 10px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>บันทึก →</button>}
         </div>
       </div>
 
-      {/* Fuel Section */}
+      {/* FUEL */}
       <div style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px 8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 16 }}>⚡</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#f7c948" }}>Fuel</span>
-          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 16 }}>⚡</span><span style={{ fontSize: 14, fontWeight: 700, color: "#f7c948" }}>Fuel</span></div>
           <span style={{ fontSize: 11, color: "#6b6b80" }}>{(waterScore + eggScore).toFixed(1)}/1</span>
         </div>
         <div style={{ height: 1, background: "#2a2a36", margin: "0 16px 8px" }} />
@@ -715,7 +587,7 @@ export default function App() {
           {[{ id: "Water 2L 💧", label: "ดื่มน้ำ 2 ลิตร (+0.5)" }, { id: "Egg 🥚", label: "กินไข่ 2 ฟอง (+0.5)" }].map(item => {
             const checked = !!dayChecks[item.id];
             return (
-              <div key={item.id} onClick={() => toggle(item.id)}
+              <div key={item.id} onClick={() => { setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], [item.id]: !prev[selected]?.[item.id] } })); setStatus(null); }}
                 style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, border: `1px solid ${checked ? "transparent" : "#2a2a36"}`, background: checked ? "rgba(255,255,255,0.02)" : "#0e0e12", transition: "all 0.2s", userSelect: "none" }}>
                 <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: checked ? "#f7c948" : "transparent", border: `2px solid ${checked ? "#f7c948" : "#2a2a36"}`, color: checked ? "#0e0e12" : "transparent", transition: "all 0.2s" }}>✓</div>
                 <span style={{ fontSize: 14, color: checked ? "#6b6b80" : "#f0f0f5", textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
@@ -725,21 +597,19 @@ export default function App() {
         </div>
       </div>
 
-      {/* Connect / Grow / Create Sections */}
+      {/* CONNECT / GROW / CREATE */}
       {SECTIONS.map(sec => {
-        const done = sec.items.filter(item => dayChecks[item.id]).length;
+        const done = sec.items.reduce((sum, item) => sum + (dayChecks[item.id] ? item.score : 0), 0);
+        const total = sec.items.reduce((sum, item) => sum + item.score, 0);
         return (
           <div key={sec.id} style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", overflow: "hidden" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px 8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 16 }}>{sec.icon}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: sec.color }}>{sec.name}</span>
-              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 16 }}>{sec.icon}</span><span style={{ fontSize: 14, fontWeight: 700, color: sec.color }}>{sec.name}</span></div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ width: 40, height: 3, background: "#2a2a36", borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${done/sec.items.length*100}%`, background: sec.color, borderRadius: 99, transition: "width 0.3s" }} />
+                  <div style={{ height: "100%", width: `${(done/total)*100}%`, background: sec.color, borderRadius: 99, transition: "width 0.3s" }} />
                 </div>
-                <span style={{ fontSize: 11, color: "#6b6b80" }}>{done}/{sec.items.length}</span>
+                <span style={{ fontSize: 11, color: "#6b6b80" }}>{done.toFixed(1)}/{total}</span>
               </div>
             </div>
             <div style={{ height: 1, background: "#2a2a36", margin: "0 16px 8px" }} />
@@ -747,10 +617,22 @@ export default function App() {
               {sec.items.map(item => {
                 const checked = !!dayChecks[item.id];
                 return (
-                  <div key={item.id} onClick={() => toggle(item.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, border: `1px solid ${checked ? "transparent" : "#2a2a36"}`, background: checked ? "rgba(255,255,255,0.02)" : "#0e0e12", transition: "all 0.2s", userSelect: "none" }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: checked ? sec.color : "transparent", border: `2px solid ${checked ? sec.color : "#2a2a36"}`, color: checked ? "#fff" : "transparent", transition: "all 0.2s" }}>✓</div>
-                    <span style={{ fontSize: 14, color: checked ? "#6b6b80" : "#f0f0f5", textDecoration: checked ? "line-through" : "none", textDecorationColor: "#2a2a36" }}>{item.label}</span>
+                  <div key={item.id}>
+                    <div onClick={() => toggle(item.id)}
+                      style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, border: `1px solid ${checked ? "transparent" : "#2a2a36"}`, background: checked ? "rgba(255,255,255,0.02)" : "#0e0e12", transition: "all 0.2s", userSelect: "none" }}>
+                      <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: checked ? sec.color : "transparent", border: `2px solid ${checked ? sec.color : "#2a2a36"}`, color: checked ? "#fff" : "transparent", transition: "all 0.2s" }}>✓</div>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 14, color: checked ? "#6b6b80" : "#f0f0f5", textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
+                        <span style={{ fontSize: 10, color: "#6b6b80", marginLeft: 6 }}>(+{item.score})</span>
+                      </div>
+                    </div>
+                    {item.requireDetail && checked && learnCategory[selected] && (
+                      <div onClick={() => { setLearnCatTemp(learnCategory[selected]); setLearnDetailTemp(learnDetail[selected] || ""); setShowLearnModal(true); }}
+                        style={{ marginTop: 4, marginLeft: 12, padding: "8px 12px", borderRadius: 8, background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)", cursor: "pointer" }}>
+                        <div style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700 }}>{learnCategory[selected]}</div>
+                        <div style={{ fontSize: 11, color: "#6b6b80", marginTop: 2 }}>{learnDetail[selected]}</div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -779,17 +661,10 @@ export default function App() {
       {status === "success" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#6b6b80" }}>Score {scoreDisplay}/{TOTAL} · {getThaiDate(selected)} 🎉</div>}
       {status === "error" && <div style={{ textAlign: "center", marginTop: 10, fontSize: 12, color: "#ff6b6b" }}>บันทึกไม่ได้ — ลองใหม่อีกครั้งครับ</div>}
 
-      {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
-        <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}>
-          <span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span>
-        </div>
-        <div onClick={() => { if (isWorkoutToday) setPage("workout"); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: isWorkoutToday ? "pointer" : "default", opacity: isWorkoutToday ? 1 : 0.2 }}>
-          <span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span>
-        </div>
-        <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}>
-          <span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span>
-        </div>
+        <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
+        <div onClick={() => { if (isWorkoutToday) setPage("workout"); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: isWorkoutToday ? "pointer" : "default", opacity: isWorkoutToday ? 1 : 0.2 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
+        <div onClick={() => setPage("stats")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
       </div>
     </div>
   );
