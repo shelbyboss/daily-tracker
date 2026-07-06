@@ -46,6 +46,24 @@ export default async function handler(req, res) {
       const getSelect = (key) => p[key]?.select?.name || '';
       const getDate = () => p['Date']?.date?.start || '';
 
+      // Parse workout log string → object
+      const workoutLogStr = getText('Workout Log 📝');
+      const workoutLogParsed = {};
+      if (workoutLogStr) {
+        workoutLogStr.split(' | ').forEach(part => {
+          const colonIdx = part.indexOf(':');
+          if (colonIdx === -1) return;
+          const exName = part.slice(0, colonIdx).trim();
+          const setsStr = part.slice(colonIdx + 1).trim();
+          const sets = setsStr.split(', ').map(s => {
+            const match = s.match(/^(\d+)x(\d+)(?:@([\d.]+)kg)?$/);
+            if (match) return { sets: match[1], reps: match[2], kg: match[3] || '' };
+            return null;
+          }).filter(Boolean);
+          if (sets.length > 0) workoutLogParsed[exName] = sets;
+        });
+      }
+
       return {
         pageId: page.id,
         date: getDate(),
@@ -68,8 +86,9 @@ export default async function handler(req, res) {
         income: getNum('รายรับ 💰'),
         expense: getNum('รายจ่าย 💸'),
         dailyScore: getNum('Daily Score'),
-        calories: getNum('แคลอรี่ 🔥'),
-        workoutLog: getText('Workout Log 📝'),
+        workoutCalories: getNum('Workout Calories'),
+        workoutLog: workoutLogStr,
+        workoutLogParsed,
       };
     });
 
