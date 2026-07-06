@@ -93,7 +93,9 @@ export default function App() {
       .then(r => r.json())
       .then(data => {
         if (!data.rows) return;
-        const newChecks = {}, newWalkSteps = {}, newSleepHours = {}, newWorkoutDone = {}, newPageIds = {}, newLearnCat = {}, newLearnDetail = {};
+        const newChecks = {}, newWalkSteps = {}, newSleepHours = {}, newWorkoutDone = {};
+        const newPageIds = {}, newLearnCat = {}, newLearnDetail = {}, newWorkoutLog = {};
+
         data.rows.forEach(row => {
           if (!row.date) return;
           if (row.pageId) newPageIds[row.date] = row.pageId;
@@ -108,10 +110,15 @@ export default function App() {
           if (row.workout) newWorkoutDone[row.date] = true;
           if (row.learnCategory) newLearnCat[row.date] = row.learnCategory;
           if (row.learnDetail) newLearnDetail[row.date] = row.learnDetail;
+          if (row.workoutLogParsed && Object.keys(row.workoutLogParsed).length > 0) {
+            newWorkoutLog[row.date] = row.workoutLogParsed;
+          }
         });
+
         setChecks(newChecks); setWalkSteps(newWalkSteps); setSleepHours(newSleepHours);
         setWorkoutDone(newWorkoutDone); setPageIds(newPageIds);
         setLearnCategory(newLearnCat); setLearnDetail(newLearnDetail);
+        setWorkoutLog(newWorkoutLog);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -217,7 +224,9 @@ export default function App() {
 
   const calcWorkoutCalories = (date) => {
     const wMin = workoutMinutes[date] || 0, cMin = cardioMinutes[date] || 0;
-    return { weight: wMin > 0 ? Math.round(5 * bodyWeight * (wMin / 60)) : 0, cardio: cMin > 0 ? Math.round(8 * bodyWeight * (cMin / 60)) : 0, total: (wMin > 0 ? Math.round(5 * bodyWeight * (wMin / 60)) : 0) + (cMin > 0 ? Math.round(8 * bodyWeight * (cMin / 60)) : 0) };
+    const w = wMin > 0 ? Math.round(5 * bodyWeight * (wMin / 60)) : 0;
+    const c = cMin > 0 ? Math.round(8 * bodyWeight * (cMin / 60)) : 0;
+    return { weight: w, cardio: c, total: w + c };
   };
 
   const submit = async () => {
@@ -246,9 +255,15 @@ export default function App() {
       if (expense) properties["รายจ่าย 💸"] = { number: parseFloat(expense) };
       if (learnCategory[selected]) properties["Learn Category"] = { select: { name: learnCategory[selected] } };
       if (learnDetail[selected]) properties["Learn Detail"] = { rich_text: [{ text: { content: learnDetail[selected] } }] };
+
+      // Save workout calories
+      const cal = calcWorkoutCalories(selected);
+      if (cal.total > 0) properties["Workout Calories"] = { number: cal.total };
+
       const workoutSummary = Object.entries(workoutLog[selected] || {}).filter(([, sets]) => sets.length > 0)
         .map(([ex, sets]) => `${ex}: ${sets.map(s => `${s.sets}x${s.reps}${s.kg ? `@${s.kg}kg` : ''}`).join(', ')}`).join(' | ');
       if (workoutSummary) properties["Workout Log 📝"] = { rich_text: [{ text: { content: workoutSummary } }] };
+
       const res = await fetch("/api/update-notion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageId, properties }) });
       if (res.ok) { setStatus("success"); } else { setStatus("error"); }
     } catch (e) { setStatus("error"); }
@@ -275,6 +290,8 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* Workout duration */}
         <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, color: "#6b6b80" }}>⏱️ เวลา workout วันนี้</span>
@@ -282,8 +299,13 @@ export default function App() {
               style={{ flex: 1, background: "#0e0e12", border: "1px solid #2a2a36", borderRadius: 8, padding: "8px 12px", color: "#f0f0f5", fontSize: 16, outline: "none", textAlign: "center" }} />
             <span style={{ fontSize: 13, color: "#6b6b80" }}>นาที</span>
           </div>
-          {workoutMinutes[selected] > 0 && <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b35", textAlign: "center" }}>🔥 {calcWorkoutCalories(selected).weight} kcal</div>}
+          {calcWorkoutCalories(selected).total > 0 && (
+            <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b35", textAlign: "center" }}>
+              🔥 เผาผลาญ {calcWorkoutCalories(selected).total} kcal
+            </div>
+          )}
         </div>
+
         {selectedGroup?.isCardio ? (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -324,6 +346,7 @@ export default function App() {
                 {loadingAI ? "⏳..." : "🤖 แนะนำ"}
               </button>
             </div>
+
             {aiRecommend && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #a78bfa", padding: "14px 16px", marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 12 }}>🤖 AI แนะนำวันนี้</div>
@@ -339,15 +362,27 @@ export default function App() {
                 ))}
               </div>
             )}
+
             {selectedGroup.exercises.concat(customExercises[selectedGroup.id] || []).map(ex => {
               const sets = dayLog[ex] || [];
               const last = getLastSession(ex);
+              // คำนวณ volume ครั้งล่าสุด
+              const lastVolume = last ? last.sets.reduce((sum, s) => {
+                const vol = parseInt(s.sets||0) * parseInt(s.reps||0) * parseFloat(s.kg||0);
+                return sum + (isNaN(vol) ? 0 : vol);
+              }, 0) : 0;
+
               return (
                 <div key={ex} style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
                     <div>
                       <span style={{ fontSize: 14, fontWeight: 700 }}>{ex}</span>
-                      {last && <div style={{ fontSize: 10, color: "#6b6b80", marginTop: 2 }}>ครั้งล่าสุด: {last.sets.map(s => `${s.sets}x${s.reps}${s.kg?`@${s.kg}kg`:''}`).join(', ')}</div>}
+                      {last && (
+                        <div style={{ fontSize: 10, color: "#6b6b80", marginTop: 2 }}>
+                          ครั้งล่าสุด ({getThaiDate(last.date).split(' ').slice(1).join(' ')}): {last.sets.map(s => `${s.sets}x${s.reps}${s.kg?`@${s.kg}kg`:''}`).join(', ')}
+                          {lastVolume > 0 && <span style={{ color: "#f7c948" }}> · {lastVolume.toLocaleString()}kg vol</span>}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       {last && sets.length === 0 && <button onClick={() => setWorkoutLog(prev => ({ ...prev, [selected]: { ...(prev[selected]||{}), [ex]: last.sets.map(s=>({...s})) } }))} style={{ background: "transparent", border: `1px solid ${selectedGroup.color}`, borderRadius: 8, padding: "6px 10px", color: selectedGroup.color, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>ใช้เหมือนเดิม</button>}
@@ -365,11 +400,27 @@ export default function App() {
                           <div onClick={() => removeSet(ex, idx)} style={{ display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#6b6b80", fontSize: 14 }}>✕</div>
                         </div>
                       ))}
+                      {/* Volume วันนี้ */}
+                      {(() => {
+                        const vol = sets.reduce((sum, s) => {
+                          const v = parseInt(s.sets||0) * parseInt(s.reps||0) * parseFloat(s.kg||0);
+                          return sum + (isNaN(v) ? 0 : v);
+                        }, 0);
+                        return vol > 0 ? (
+                          <div style={{ fontSize: 11, color: "#4ecdc4", textAlign: "right", marginTop: 4 }}>
+                            Volume: {vol.toLocaleString()} kg
+                            {lastVolume > 0 && <span style={{ color: vol > lastVolume ? "#4ecdc4" : "#ff6b6b", marginLeft: 6 }}>
+                              {vol > lastVolume ? `▲ +${(vol-lastVolume).toLocaleString()}` : `▼ ${(vol-lastVolume).toLocaleString()}`}
+                            </span>}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                   )}
                 </div>
               );
             })}
+
             <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px", marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 8 }}>➕ เพิ่มท่าเอง</div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -377,82 +428,21 @@ export default function App() {
                 <button onClick={() => { if (customExercise.trim()) { const name = customExercise.trim(); setCustomExercises(prev => ({ ...prev, [selectedGroup.id]: [...(prev[selectedGroup.id]||[]), name] })); addSet(name); setCustomExercise(""); } }} style={{ background: selectedGroup.color, border: "none", borderRadius: 8, padding: "10px 14px", color: "#0e0e12", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>เพิ่ม</button>
               </div>
             </div>
+
             {calcWorkoutCalories(selected).total > 0 && (
               <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #ff6b35", padding: "14px 16px", marginBottom: 12, textAlign: "center" }}>
                 <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 4 }}>🔥 พลังงานที่ใช้</div>
                 <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{calcWorkoutCalories(selected).total} kcal</div>
+                {calcWorkoutCalories(selected).cardio > 0 && <div style={{ fontSize: 11, color: "#6b6b80" }}>Cardio {calcWorkoutCalories(selected).cardio} + Weights {calcWorkoutCalories(selected).weight}</div>}
               </div>
             )}
           </>
         )}
+
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
           <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
           <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
           <div onClick={() => window.location.href = '/stats'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── STATS PAGE ──
-  if (page === "stats") {
-    const allDates = Object.keys(pageIds).sort();
-    const scored = allDates.map(date => ({ date, score: getDayScore(date) }));
-    const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
-    const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
-    const workoutDays = weekDates.filter(d => workoutDone[d]).length;
-    return (
-      <div style={{ background: "#0e0e12", minHeight: "100vh", color: "#f0f0f5", fontFamily: "'Sarabun', sans-serif", padding: "20px 16px 80px", maxWidth: 480, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#6b6b80", marginBottom: 4 }}>STATS</div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวมเดือนนี้</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
-          {[{ label: "เฉลี่ยต่อวัน", value: avg, unit: `/ ${TOTAL}` }, { label: "วันที่ดีสุด", value: best.score?.toFixed(1), unit: best.date ? best.date.slice(5) : "-" }, { label: "Workout สัปดาห์นี้", value: workoutDays, unit: "วัน", color: workoutDays >= 3 ? "#4ecdc4" : "#f7c948" }].map(card => (
-            <div key={card.label} style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "12px" }}>
-              <div style={{ fontSize: 10, color: "#6b6b80", marginBottom: 6 }}>{card.label}</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: card.color || "#f0f0f5" }}>{card.value}</div>
-              <div style={{ fontSize: 10, color: "#6b6b80" }}>{card.unit}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px", marginBottom: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12 }}>Score รายวัน</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
-            {allDates.slice(-14).map(date => {
-              const sc = getDayScore(date);
-              const h = TOTAL > 0 ? (sc / TOTAL) * 80 : 0;
-              return (
-                <div key={date} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <div style={{ width: "100%", height: h, background: sc >= TOTAL * 0.7 ? "#4ecdc4" : sc >= TOTAL * 0.4 ? "#f7c948" : "#2a2a36", borderRadius: 3, transition: "height 0.3s" }} />
-                  <div style={{ fontSize: 8, color: "#6b6b80" }}>{new Date(date + "T00:00:00").getDate()}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "16px" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#6b6b80", marginBottom: 12 }}>Workout สัปดาห์นี้</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
-            {weekDates.map(date => {
-              const d = new Date(date + "T00:00:00");
-              const done = workoutDone[date];
-              return (
-                <div key={date} style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 9, color: "#6b6b80", marginBottom: 4 }}>{DAY_SHORT[d.getDay()]}</div>
-                  <div style={{ width: "100%", aspectRatio: "1", borderRadius: 6, background: done ? "#ff6b35" : "#2a2a36", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{done ? "💪" : ""}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ marginTop: 10, fontSize: 12, color: workoutDays >= 3 ? "#4ecdc4" : "#6b6b80", textAlign: "center" }}>
-            {workoutDays >= 3 ? `✅ ${workoutDays} วัน — เป้าหมายสำเร็จ!` : `${workoutDays}/3 วัน — ต้องการอีก ${3 - workoutDays} วัน`}
-          </div>
-        </div>
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#17171f", borderTop: "1px solid #2a2a36", display: "flex", justifyContent: "space-around", padding: "10px 0 20px", zIndex: 100 }}>
-          <div onClick={() => setPage("check")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>✅</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Check</span></div>
-          <div onClick={() => setPage("workout")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 0.4 }}><span style={{ fontSize: 20 }}>💪</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Workout</span></div>
-          <div onClick={() => window.location.href = '/stats'} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", opacity: 1 }}><span style={{ fontSize: 20 }}>📊</span><span style={{ fontSize: 10, color: "#f0f0f5" }}>Stats</span></div>
         </div>
       </div>
     );
