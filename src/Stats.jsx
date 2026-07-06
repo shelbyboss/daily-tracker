@@ -26,20 +26,10 @@ function calcStats(rows, weekDates) {
   const sleepPct = pct(weekRows.map(r => r?.sleep));
   const workoutPct = pct(weekRows.map(r => r?.workout));
   const movePct = Math.round((walkPct + sleepPct + workoutPct * 2) / 4);
-  const waterPct = pct(weekRows.map(r => r?.water));
-  const eggPct = pct(weekRows.map(r => r?.egg));
-  const fuelPct = Math.round((waterPct + eggPct) / 2);
-  const hangoutPct = pct(weekRows.map(r => r?.hangout));
-  const eventPct = pct(weekRows.map(r => r?.event));
-  const tiktokPct = pct(weekRows.map(r => r?.tiktok));
-  const connectPct = Math.round((hangoutPct + eventPct + tiktokPct) / 3);
-  const podcastPct = pct(weekRows.map(r => r?.podcast));
-  const bujoPct = pct(weekRows.map(r => r?.bujo));
-  const learnPct = pct(weekRows.map(r => r?.learnCategory));
-  const growPct = Math.round((podcastPct + bujoPct + learnPct) / 3);
-  const ideaPct = pct(weekRows.map(r => r?.idea));
-  const postPct = pct(weekRows.map(r => r?.postReal));
-  const createPct = Math.round((ideaPct + postPct * 3) / 4);
+  const fuelPct = Math.round((pct(weekRows.map(r => r?.water)) + pct(weekRows.map(r => r?.egg))) / 2);
+  const connectPct = Math.round((pct(weekRows.map(r => r?.hangout)) + pct(weekRows.map(r => r?.event)) + pct(weekRows.map(r => r?.tiktok))) / 3);
+  const growPct = Math.round((pct(weekRows.map(r => r?.podcast)) + pct(weekRows.map(r => r?.bujo)) + pct(weekRows.map(r => r?.learnCategory))) / 3);
+  const createPct = Math.round((pct(weekRows.map(r => r?.idea)) + pct(weekRows.map(r => r?.postReal)) * 3) / 4);
   return { movePct, fuelPct, connectPct, growPct, createPct };
 }
 
@@ -74,25 +64,24 @@ function RadarChart({ stats }) {
   const labelPoint = (i) => { const a = angle(i), dist = r + 28; return { x: cx + dist * Math.cos(a), y: cy + dist * Math.sin(a) }; };
   const dataPoints = axes.map((ax, i) => point(i, ax.pct));
   const polygon = dataPoints.map(p => `${p.x},${p.y}`).join(' ');
-  const grids = [25, 50, 75, 100];
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {grids.map(g => {
-          const gridPoints = axes.map((_, i) => { const a = angle(i), dist = (g / 100) * r; return `${cx + dist * Math.cos(a)},${cy + dist * Math.sin(a)}`; }).join(' ');
-          return <polygon key={g} points={gridPoints} fill="none" stroke="#2a2a36" strokeWidth="1" />;
+        {[25,50,75,100].map(g => {
+          const pts = axes.map((_, i) => { const a = angle(i), dist = (g/100)*r; return `${cx+dist*Math.cos(a)},${cy+dist*Math.sin(a)}`; }).join(' ');
+          return <polygon key={g} points={pts} fill="none" stroke="#2a2a36" strokeWidth="1" />;
         })}
         {axes.map((_, i) => { const op = outerPoint(i); return <line key={i} x1={cx} y1={cy} x2={op.x} y2={op.y} stroke="#2a2a36" strokeWidth="1" />; })}
         <polygon points={polygon} fill={`${cls.color}30`} stroke={cls.color} strokeWidth="2" strokeLinejoin="round" />
         {dataPoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill={axes[i].color} />)}
         {axes.map((ax, i) => { const lp = labelPoint(i); return (
           <g key={i}>
-            <text x={lp.x} y={lp.y - 6} textAnchor="middle" fill={ax.color} fontSize="10" fontWeight="700" fontFamily="Sarabun, sans-serif">{ax.label}</text>
-            <text x={lp.x} y={lp.y + 8} textAnchor="middle" fill="#6b6b80" fontSize="9" fontFamily="Sarabun, sans-serif">{ax.pct}%</text>
+            <text x={lp.x} y={lp.y-6} textAnchor="middle" fill={ax.color} fontSize="10" fontWeight="700" fontFamily="Sarabun, sans-serif">{ax.label}</text>
+            <text x={lp.x} y={lp.y+8} textAnchor="middle" fill="#6b6b80" fontSize="9" fontFamily="Sarabun, sans-serif">{ax.pct}%</text>
           </g>
         ); })}
-        <text x={cx} y={cy - 8} textAnchor="middle" fontSize="22">{cls.icon}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fill={cls.color} fontSize="11" fontWeight="700" fontFamily="Sarabun, sans-serif">{cls.name}</text>
+        <text x={cx} y={cy-8} textAnchor="middle" fontSize="22">{cls.icon}</text>
+        <text x={cx} y={cy+12} textAnchor="middle" fill={cls.color} fontSize="11" fontWeight="700" fontFamily="Sarabun, sans-serif">{cls.name}</text>
       </svg>
     </div>
   );
@@ -152,10 +141,11 @@ export default function Stats() {
     return walk + sleep + workout + water + egg + hangout + event + tiktok + podcast + bujo + learn + idea + post;
   };
 
-  const scored = activeRows.map(r => ({ date: r.date, score: getDayScore(r) }));
+  const scored = activeRows.map(r => ({ date: r.date, score: getDayScore(r), cal: r.workoutCalories || 0 }));
   const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
   const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
   const workoutDays = weekDates.filter(d => rows.find(r => r.date === d)?.workout).length;
+  const weekCalTotal = weekDates.reduce((sum, d) => sum + (rows.find(r => r.date === d)?.workoutCalories || 0), 0);
   const weekStats = calcStats(rows, weekDates);
   const cls = getClass(weekStats);
 
@@ -166,6 +156,7 @@ export default function Stats() {
         <div style={{ fontSize: 22, fontWeight: 700 }}>ภาพรวม</div>
       </div>
 
+      {/* Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'Avg Score', value: avg, unit: '/10', color: '#f0f0f5' },
@@ -180,12 +171,39 @@ export default function Stats() {
         ))}
       </div>
 
+      {/* Radar Chart */}
       <div style={{ background: '#17171f', borderRadius: 16, border: `1px solid ${cls.color}40`, padding: '16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>⚡ Weekly Stats</div>
         <div style={{ fontSize: 11, color: '#6b6b80', marginBottom: 16 }}>สัปดาห์นี้ (% จาก 7 วัน)</div>
         <RadarChart stats={weekStats} />
       </div>
 
+      {/* Workout Cal สัปดาห์ */}
+      <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #ff6b35', padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>🔥 Calories สัปดาห์นี้</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 12 }}>
+          {weekDates.map(date => {
+            const d = new Date(date + 'T00:00:00');
+            const row = rows.find(r => r.date === date);
+            const cal = row?.workoutCalories || 0;
+            const maxCal = Math.max(...weekDates.map(d2 => rows.find(r => r.date === d2)?.workoutCalories || 0), 1);
+            return (
+              <div key={date} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 9, color: '#6b6b80', marginBottom: 4 }}>{DAY_SHORT[d.getDay()]}</div>
+                <div style={{ height: 40, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', marginBottom: 4 }}>
+                  <div style={{ width: '80%', height: `${(cal/maxCal)*100}%`, minHeight: cal > 0 ? 4 : 0, background: '#ff6b35', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                </div>
+                <div style={{ fontSize: 8, color: cal > 0 ? '#ff6b35' : '#2a2a36' }}>{cal > 0 ? cal : '-'}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 13, color: '#ff6b35', fontWeight: 700 }}>
+          รวมสัปดาห์นี้ {weekCalTotal.toLocaleString()} kcal
+        </div>
+      </div>
+
+      {/* Score Bar Chart */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>📊 Score รายวัน</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
@@ -202,6 +220,7 @@ export default function Stats() {
         </div>
       </div>
 
+      {/* Workout Week */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>💪 Workout สัปดาห์นี้</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
@@ -211,9 +230,7 @@ export default function Stats() {
             return (
               <div key={date} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 9, color: '#6b6b80', marginBottom: 4 }}>{DAY_SHORT[d.getDay()]}</div>
-                <div style={{ width: '100%', aspectRatio: '1', borderRadius: 6, background: done ? '#ff6b35' : '#2a2a36', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                  {done ? '💪' : ''}
-                </div>
+                <div style={{ width: '100%', aspectRatio: '1', borderRadius: 6, background: done ? '#ff6b35' : '#2a2a36', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{done ? '💪' : ''}</div>
               </div>
             );
           })}
@@ -223,6 +240,7 @@ export default function Stats() {
         </div>
       </div>
 
+      {/* Finance */}
       <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>💰 การเงินรายวัน</div>
         {activeRows.filter(r => r.income > 0 || r.expense > 0).slice(-10).map((row, i) => (
