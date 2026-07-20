@@ -57,6 +57,22 @@ function getWeekDates() {
   });
 }
 
+// ประมาณแคลอรี่สำหรับวันที่ไม่มี Workout Calories บันทึกไว้จริง (สูตรเดียวกับหน้า Stats)
+const FLAT_CAL_ESTIMATE = 300; // ติ๊ก ✅ เฉยๆ ไม่มี log เซ็ตเลย
+const MIN_PER_SET = 3; // นาทีเฉลี่ยต่อเซ็ต (รวมพัก) ใช้ประมาณเวลาจากจำนวนเซ็ตที่ log ไว้
+const CAL_PER_KG_PER_HOUR = 5;
+
+function estimateRowCalories(row, bodyWeight) {
+  if (row?.workoutCalories > 0) return { cal: row.workoutCalories, source: 'logged' };
+  if (!row?.workout) return { cal: 0, source: 'none' };
+  const totalSets = Object.values(row.workoutLogParsed || {}).flat().reduce((sum, set) => sum + (parseInt(set.sets) || 0), 0);
+  if (totalSets > 0) {
+    const estMinutes = totalSets * MIN_PER_SET;
+    return { cal: Math.round(CAL_PER_KG_PER_HOUR * bodyWeight * (estMinutes / 60)), source: 'sets' };
+  }
+  return { cal: FLAT_CAL_ESTIMATE, source: 'flat' };
+}
+
 export default function App() {
   const today = getTodayStr();
   const weekDates = getWeekDates();
@@ -87,6 +103,7 @@ export default function App() {
   const [loadingAI, setLoadingAI] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pageIds, setPageIds] = useState({});
+  const [historyRows, setHistoryRows] = useState([]);
 
   useEffect(() => {
     fetch('/api/get-notion')
@@ -119,6 +136,7 @@ export default function App() {
         setWorkoutDone(newWorkoutDone); setPageIds(newPageIds);
         setLearnCategory(newLearnCat); setLearnDetail(newLearnDetail);
         setWorkoutLog(newWorkoutLog);
+        setHistoryRows(data.rows.filter(r => r.date));
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -229,6 +247,27 @@ export default function App() {
     return { weight: w, cardio: c, total: w + c };
   };
 
+  const getSelectedDayCalories = () => {
+    const live = calcWorkoutCalories(selected).total;
+    if (live > 0) return { cal: live, source: 'live' };
+    const hist = historyRows.find(r => r.date === selected);
+    if (hist?.workoutCalories > 0) return { cal: hist.workoutCalories, source: 'logged' };
+    const setsSource = workoutLog[selected] || hist?.workoutLogParsed || {};
+    const totalSets = Object.values(setsSource).flat().reduce((sum, s) => sum + (parseInt(s.sets) || 0), 0);
+    if (totalSets > 0) {
+      const estMinutes = totalSets * MIN_PER_SET;
+      return { cal: Math.round(CAL_PER_KG_PER_HOUR * bodyWeight * (estMinutes / 60)), source: 'sets' };
+    }
+    if (isWorkoutToday) return { cal: FLAT_CAL_ESTIMATE, source: 'flat' };
+    return { cal: 0, source: 'none' };
+  };
+
+  const getPreviousWorkoutDay = () => {
+    const past = historyRows.filter(r => r.date < selected && r.workout).sort((a, b) => b.date.localeCompare(a.date));
+    if (past.length === 0) return null;
+    return { date: past[0].date, ...estimateRowCalories(past[0], bodyWeight) };
+  };
+
   const submit = async () => {
     setStatus("loading");
     try {
@@ -305,6 +344,27 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* Cal เทียบกับครั้งก่อน */}
+        {(() => {
+          const todayInfo = getSelectedDayCalories();
+          if (todayInfo.cal === 0) return null;
+          const prevInfo = getPreviousWorkoutDay();
+          const delta = prevInfo ? todayInfo.cal - prevInfo.cal : null;
+          return (
+            <div style={{ background: "#17171f", borderRadius: 16, border: "1px solid #ff6b35", padding: "14px 16px", marginBottom: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 12, color: "#6b6b80", marginBottom: 6 }}>🔥 Cal {getThaiDate(selected).split(' ').slice(1).join(' ')}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#ff6b35" }}>{todayInfo.source === 'sets' || todayInfo.source === 'flat' ? '~' : ''}{todayInfo.cal.toLocaleString()} kcal</div>
+              {prevInfo ? (
+                <div style={{ fontSize: 12, marginTop: 8, color: delta > 0 ? "#4ecdc4" : delta < 0 ? "#ff6b6b" : "#6b6b80", fontWeight: 700 }}>
+                  {delta > 0 ? `▲ +${delta}` : delta < 0 ? `▼ ${delta}` : '– เท่าเดิม'} เทียบกับครั้งก่อน ({getThaiDate(prevInfo.date).split(' ').slice(1).join(' ')} · {prevInfo.source !== 'logged' ? '~' : ''}{prevInfo.cal} kcal)
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: "#6b6b80", marginTop: 8 }}>ยังไม่มีข้อมูลครั้งก่อนเทียบ</div>
+              )}
+            </div>
+          );
+        })()}
 
         {selectedGroup?.isCardio ? (
           <div style={{ marginBottom: 16 }}>
