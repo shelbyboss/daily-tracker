@@ -123,10 +123,28 @@ export default function Stats() {
   const totalIncome = activeRows.reduce((s, r) => s + r.income, 0);
   const totalExpense = activeRows.reduce((s, r) => s + r.expense, 0);
 
-  const DEFAULT_WORKOUT_CAL_ESTIMATE = 300; // ใช้ประมาณค่าสำหรับวันที่ติ๊ก ✅ workout แต่ไม่ได้กรอกเวลาในหน้า Workout
-  const loggedCalories = activeRows.reduce((s, r) => s + (r.workoutCalories || 0), 0);
-  const uncountedWorkoutDays = activeRows.filter(r => r.workout && !(r.workoutCalories > 0)).length;
-  const estimatedCalories = uncountedWorkoutDays * DEFAULT_WORKOUT_CAL_ESTIMATE;
+  // ประมาณแคลอรี่สำหรับวันที่ไม่มี Workout Calories บันทึกไว้จริง
+  const FLAT_CAL_ESTIMATE = 300; // ติ๊ก ✅ เฉยๆ ไม่มี log เซ็ตเลย
+  const MIN_PER_SET = 3; // นาทีเฉลี่ยต่อเซ็ต (รวมพัก) ใช้ประมาณเวลาจากจำนวนเซ็ตที่ log ไว้
+  const CAL_PER_KG_PER_HOUR = 5; // สูตรเดียวกับหน้า Workout
+  const bodyWeight = parseFloat(localStorage.getItem('bodyWeight') || '62');
+
+  let loggedCalories = 0, setEstimatedCalories = 0, flatEstimatedCalories = 0;
+  let setEstimatedDays = 0, flatEstimatedDays = 0;
+  activeRows.forEach(r => {
+    if (r.workoutCalories > 0) { loggedCalories += r.workoutCalories; return; }
+    if (!r.workout) return;
+    const totalSets = Object.values(r.workoutLogParsed || {}).flat().reduce((sum, set) => sum + (parseInt(set.sets) || 0), 0);
+    if (totalSets > 0) {
+      const estMinutes = totalSets * MIN_PER_SET;
+      setEstimatedCalories += Math.round(CAL_PER_KG_PER_HOUR * bodyWeight * (estMinutes / 60));
+      setEstimatedDays += 1;
+    } else {
+      flatEstimatedCalories += FLAT_CAL_ESTIMATE;
+      flatEstimatedDays += 1;
+    }
+  });
+  const estimatedCalories = setEstimatedCalories + flatEstimatedCalories;
   const totalCalories = loggedCalories + estimatedCalories;
 
   const getDayScore = (row) => {
@@ -268,8 +286,10 @@ export default function Stats() {
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>🔥 Cal รวมตอนออกกำลังกาย (ทั้งหมด)</div>
         <div style={{ fontSize: 26, fontWeight: 700, color: '#ff6b35' }}>{totalCalories.toLocaleString()} <span style={{ fontSize: 14, color: '#6b6b80' }}>kcal</span></div>
         {estimatedCalories > 0 && (
-          <div style={{ fontSize: 10, color: '#6b6b80', marginTop: 6 }}>
-            บันทึกจริง {loggedCalories.toLocaleString()} kcal + ประมาณ {uncountedWorkoutDays} วันที่ติ๊ก ✅ แต่ไม่ได้กรอกเวลา (~{DEFAULT_WORKOUT_CAL_ESTIMATE} kcal/วัน)
+          <div style={{ fontSize: 10, color: '#6b6b80', marginTop: 6, lineHeight: 1.6 }}>
+            บันทึกจริง {loggedCalories.toLocaleString()} kcal
+            {setEstimatedDays > 0 && <> · ประมาณจากเซ็ตที่ log {setEstimatedDays} วัน ({setEstimatedCalories.toLocaleString()} kcal)</>}
+            {flatEstimatedDays > 0 && <> · ประมาณคงที่ {flatEstimatedDays} วันที่ติ๊ก ✅ ไม่มี log (~{FLAT_CAL_ESTIMATE} kcal/วัน)</>}
           </div>
         )}
       </div>
