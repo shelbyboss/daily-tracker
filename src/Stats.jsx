@@ -19,6 +19,30 @@ function getThaiShort(dateStr) {
   return `${DAY_SHORT[d.getDay()]} ${d.getDate()}`;
 }
 
+function getPrevWeekDates(weekDates) {
+  return weekDates.map(date => {
+    const d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+}
+
+// ประมาณแคลอรี่สำหรับวันที่ไม่มี Workout Calories บันทึกไว้จริง
+const FLAT_CAL_ESTIMATE = 300; // ติ๊ก ✅ เฉยๆ ไม่มี log เซ็ตเลย
+const MIN_PER_SET = 3; // นาทีเฉลี่ยต่อเซ็ต (รวมพัก) ใช้ประมาณเวลาจากจำนวนเซ็ตที่ log ไว้
+const CAL_PER_KG_PER_HOUR = 5; // สูตรเดียวกับหน้า Workout
+
+function estimateRowCalories(row, bodyWeight) {
+  if (row?.workoutCalories > 0) return { cal: row.workoutCalories, source: 'logged' };
+  if (!row?.workout) return { cal: 0, source: 'none' };
+  const totalSets = Object.values(row.workoutLogParsed || {}).flat().reduce((sum, set) => sum + (parseInt(set.sets) || 0), 0);
+  if (totalSets > 0) {
+    const estMinutes = totalSets * MIN_PER_SET;
+    return { cal: Math.round(CAL_PER_KG_PER_HOUR * bodyWeight * (estMinutes / 60)), source: 'sets' };
+  }
+  return { cal: FLAT_CAL_ESTIMATE, source: 'flat' };
+}
+
 function calcStats(rows, weekDates) {
   const weekRows = weekDates.map(date => rows.find(r => r.date === date) || null);
   const pct = (vals) => Math.round((vals.filter(Boolean).length / 7) * 100);
@@ -123,26 +147,15 @@ export default function Stats() {
   const totalIncome = activeRows.reduce((s, r) => s + r.income, 0);
   const totalExpense = activeRows.reduce((s, r) => s + r.expense, 0);
 
-  // ประมาณแคลอรี่สำหรับวันที่ไม่มี Workout Calories บันทึกไว้จริง
-  const FLAT_CAL_ESTIMATE = 300; // ติ๊ก ✅ เฉยๆ ไม่มี log เซ็ตเลย
-  const MIN_PER_SET = 3; // นาทีเฉลี่ยต่อเซ็ต (รวมพัก) ใช้ประมาณเวลาจากจำนวนเซ็ตที่ log ไว้
-  const CAL_PER_KG_PER_HOUR = 5; // สูตรเดียวกับหน้า Workout
   const bodyWeight = parseFloat(localStorage.getItem('bodyWeight') || '62');
 
   let loggedCalories = 0, setEstimatedCalories = 0, flatEstimatedCalories = 0;
   let setEstimatedDays = 0, flatEstimatedDays = 0;
   activeRows.forEach(r => {
-    if (r.workoutCalories > 0) { loggedCalories += r.workoutCalories; return; }
-    if (!r.workout) return;
-    const totalSets = Object.values(r.workoutLogParsed || {}).flat().reduce((sum, set) => sum + (parseInt(set.sets) || 0), 0);
-    if (totalSets > 0) {
-      const estMinutes = totalSets * MIN_PER_SET;
-      setEstimatedCalories += Math.round(CAL_PER_KG_PER_HOUR * bodyWeight * (estMinutes / 60));
-      setEstimatedDays += 1;
-    } else {
-      flatEstimatedCalories += FLAT_CAL_ESTIMATE;
-      flatEstimatedDays += 1;
-    }
+    const { cal, source } = estimateRowCalories(r, bodyWeight);
+    if (source === 'logged') loggedCalories += cal;
+    else if (source === 'sets') { setEstimatedCalories += cal; setEstimatedDays += 1; }
+    else if (source === 'flat') { flatEstimatedCalories += cal; flatEstimatedDays += 1; }
   });
   const estimatedCalories = setEstimatedCalories + flatEstimatedCalories;
   const totalCalories = loggedCalories + estimatedCalories;
@@ -169,7 +182,21 @@ export default function Stats() {
   const avg = scored.length ? (scored.reduce((a, b) => a + b.score, 0) / scored.length).toFixed(1) : 0;
   const best = scored.reduce((a, b) => b.score > a.score ? b : a, scored[0] || { score: 0 });
   const workoutDays = weekDates.filter(d => rows.find(r => r.date === d)?.workout).length;
-  const weekCalTotal = weekDates.reduce((sum, d) => sum + (rows.find(r => r.date === d)?.workoutCalories || 0), 0);
+  const weekCalByDate = Object.fromEntries(weekDates.map(date => [date, estimateRowCalories(rows.find(r => r.date === date), bodyWeight).cal]));
+  const weekCalTotal = weekDates.reduce((sum, d) => sum + weekCalByDate[d], 0);
+  const avgCalThisWeek = weekCalTotal / 7;
+
+  const prevWeekDates = getPrevWeekDates(weekDates);
+  const prevWeekHasData = prevWeekDates.some(d => rows.find(r => r.date === d));
+  const prevWeekCalTotal = prevWeekDates.reduce((sum, d) => sum + estimateRowCalories(rows.find(r => r.date === d), bodyWeight).cal, 0);
+  const avgCalLastWeek = prevWeekCalTotal / 7;
+  const avgCalDelta = avgCalThisWeek - avgCalLastWeek;
+
+  const workoutCalEntries = activeRows.filter(r => r.workout)
+    .map(r => ({ date: r.date, ...estimateRowCalories(r, bodyWeight) }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((entry, i, arr) => ({ ...entry, delta: i > 0 ? entry.cal - arr[i - 1].cal : null }));
+
   const weekStats = calcStats(rows, weekDates);
   const cls = getClass(weekStats);
 
@@ -208,9 +235,8 @@ export default function Stats() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 12 }}>
           {weekDates.map(date => {
             const d = new Date(date + 'T00:00:00');
-            const row = rows.find(r => r.date === date);
-            const cal = row?.workoutCalories || 0;
-            const maxCal = Math.max(...weekDates.map(d2 => rows.find(r => r.date === d2)?.workoutCalories || 0), 1);
+            const cal = weekCalByDate[date];
+            const maxCal = Math.max(...weekDates.map(d2 => weekCalByDate[d2]), 1);
             return (
               <div key={date} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 9, color: '#6b6b80', marginBottom: 4 }}>{DAY_SHORT[d.getDay()]}</div>
@@ -225,6 +251,33 @@ export default function Stats() {
         <div style={{ textAlign: 'center', fontSize: 13, color: '#ff6b35', fontWeight: 700 }}>
           รวมสัปดาห์นี้ {weekCalTotal.toLocaleString()} kcal
         </div>
+        <div style={{ textAlign: 'center', fontSize: 11, color: '#6b6b80', marginTop: 6 }}>
+          เฉลี่ย {avgCalThisWeek.toFixed(0)} kcal/วัน
+          {prevWeekHasData && (
+            <span style={{ color: avgCalDelta > 0 ? '#4ecdc4' : avgCalDelta < 0 ? '#ff6b6b' : '#6b6b80', fontWeight: 700, marginLeft: 6 }}>
+              {avgCalDelta > 0 ? `▲ +${avgCalDelta.toFixed(0)}` : avgCalDelta < 0 ? `▼ ${avgCalDelta.toFixed(0)}` : '– เท่าเดิม'} จากสัปดาห์ที่แล้ว
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Cal รายวัน (เทียบครั้งก่อน) */}
+      <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #2a2a36', padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 14, textTransform: 'uppercase', letterSpacing: 1 }}>🔥 Cal รายวัน (เทียบครั้งก่อน)</div>
+        {workoutCalEntries.length === 0 && (
+          <div style={{ fontSize: 13, color: '#6b6b80', textAlign: 'center', padding: '20px 0' }}>ยังไม่มีข้อมูลออกกำลังกายครับ</div>
+        )}
+        {workoutCalEntries.slice(-10).reverse().map((entry, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #2a2a36' }}>
+            <div style={{ fontSize: 13, color: '#6b6b80' }}>{getThaiShort(entry.date)}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 13, color: '#ff6b35', fontWeight: 700 }}>{entry.source !== 'logged' ? '~' : ''}{entry.cal.toLocaleString()} kcal</div>
+              <div style={{ fontSize: 11, color: entry.delta === null ? '#6b6b80' : entry.delta > 0 ? '#4ecdc4' : entry.delta < 0 ? '#ff6b6b' : '#6b6b80', minWidth: 60, textAlign: 'right' }}>
+                {entry.delta === null ? 'เริ่มต้น' : entry.delta > 0 ? `▲ +${entry.delta}` : entry.delta < 0 ? `▼ ${entry.delta}` : '– เท่าเดิม'}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Score Bar Chart */}
