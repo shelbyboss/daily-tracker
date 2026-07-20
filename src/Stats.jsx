@@ -122,6 +122,7 @@ export default function Stats() {
   const activeRows = rows.filter(r => r.date);
   const totalIncome = activeRows.reduce((s, r) => s + r.income, 0);
   const totalExpense = activeRows.reduce((s, r) => s + r.expense, 0);
+  const totalCalories = activeRows.reduce((s, r) => s + (r.workoutCalories || 0), 0);
 
   const getDayScore = (row) => {
     if (!row) return 0;
@@ -255,6 +256,12 @@ export default function Stats() {
         {activeRows.filter(r => r.income > 0 || r.expense > 0).length === 0 && (
           <div style={{ fontSize: 13, color: '#6b6b80', textAlign: 'center', padding: '20px 0' }}>ยังไม่มีข้อมูลการเงินครับ</div>
         )}
+      </div>
+
+      {/* Total Calories Burned (All-time) */}
+      <div style={{ background: '#17171f', borderRadius: 16, border: '1px solid #ff6b35', padding: '16px', marginTop: 16, textAlign: 'center' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#6b6b80', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>🔥 Cal รวมตอนออกกำลังกาย (ทั้งหมด)</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: '#ff6b35' }}>{totalCalories.toLocaleString()} <span style={{ fontSize: 14, color: '#6b6b80' }}>kcal</span></div>
       </div>
 
       <BottomNav />
