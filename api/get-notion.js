@@ -74,6 +74,8 @@ export default async function handler(req, res) {
         sleepHours: getNum('Sleep Hours'),
         water: getCheck('Water 2L 💧'),
         egg: getCheck('Egg 🥚'),
+        roller: getCheck('Roller x100 🛞'),
+        squat: getCheck('Squat x100 🦵'),
         hangout: getCheck('Hangout 🤝'),
         event: getCheck('Event 🎉'),
         tiktok: getCheck('TikTok 🔥'),

@@ -49,7 +49,9 @@ function calcStats(rows, weekDates) {
   const walkPct = pct(weekRows.map(r => r?.walk));
   const sleepPct = pct(weekRows.map(r => r?.sleep));
   const workoutPct = pct(weekRows.map(r => r?.workout));
-  const movePct = Math.round((walkPct + sleepPct + workoutPct * 2) / 4);
+  const rollerPct = pct(weekRows.map(r => r?.roller));
+  const squatPct = pct(weekRows.map(r => r?.squat));
+  const movePct = Math.round((walkPct + sleepPct + workoutPct * 2 + rollerPct + squatPct) / 6);
   const fuelPct = Math.round((pct(weekRows.map(r => r?.water)) + pct(weekRows.map(r => r?.egg))) / 2);
   const connectPct = Math.round((pct(weekRows.map(r => r?.hangout)) + pct(weekRows.map(r => r?.event)) + pct(weekRows.map(r => r?.tiktok))) / 3);
   const growPct = Math.round((pct(weekRows.map(r => r?.podcast)) + pct(weekRows.map(r => r?.bujo)) + pct(weekRows.map(r => r?.learnCategory))) / 3);
@@ -167,6 +169,8 @@ export default function Stats() {
     const workout = row.workout ? 2 : 0;
     const water = row.water ? 0.5 : 0;
     const egg = row.egg ? 0.5 : 0;
+    const roller = row.roller ? 1 : 0;
+    const squat = row.squat ? 1 : 0;
     const hangout = row.hangout ? 1 : 0;
     const event = row.event ? 1 : 0;
     const tiktok = row.tiktok ? 0.5 : 0;
@@ -175,7 +179,7 @@ export default function Stats() {
     const learn = row.learnCategory ? 1 : 0;
     const idea = row.idea ? 0.5 : 0;
     const post = row.postReal ? 1.5 : 0;
-    return walk + sleep + workout + water + egg + hangout + event + tiktok + podcast + bujo + learn + idea + post;
+    return walk + sleep + workout + water + egg + roller + squat + hangout + event + tiktok + podcast + bujo + learn + idea + post;
   };
 
   const scored = activeRows.map(r => ({ date: r.date, score: getDayScore(r), cal: r.workoutCalories || 0 }));

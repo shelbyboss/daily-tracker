@@ -33,6 +33,11 @@ const SECTIONS = [
   ]},
 ];
 
+const MOVE_EXTRA_ITEMS = [
+  { id: "Roller x100 🛞", label: "Roller 100 ครั้ง" },
+  { id: "Squat x100 🦵", label: "Squat 100 ครั้ง" },
+];
+
 const ALL_ITEMS = SECTIONS.flatMap(s => s.items);
 const TOTAL = 10;
 const DAY_SHORT = ["อา","จ","อ","พ","พฤ","ศ","ส"];
@@ -121,6 +126,7 @@ export default function App() {
             "Podcast 🎧": row.podcast, "Bujo 📓": row.bujo, "Learn 📚": !!(row.learnCategory),
             "Idea Content 💡": row.idea, "Post Real ✅": row.postReal,
             "Water 2L 💧": row.water, "Egg 🥚": row.egg,
+            "Roller x100 🛞": row.roller, "Squat x100 🦵": row.squat,
           };
           if (row.walkSteps) newWalkSteps[row.date] = String(row.walkSteps);
           if (row.sleepHours) newSleepHours[row.date] = String(row.sleepHours);
@@ -152,8 +158,10 @@ export default function App() {
   const workoutScore = isWorkoutToday ? 2 : 0;
   const waterScore = dayChecks["Water 2L 💧"] ? 0.5 : 0;
   const eggScore = dayChecks["Egg 🥚"] ? 0.5 : 0;
+  const rollerScore = dayChecks["Roller x100 🛞"] ? 1 : 0;
+  const squatScore = dayChecks["Squat x100 🦵"] ? 1 : 0;
   const sectionScore = ALL_ITEMS.reduce((sum, item) => sum + (dayChecks[item.id] ? (item.score || 1) : 0), 0);
-  const scoreDisplay = parseFloat((walkScore + sleepScore + workoutScore + waterScore + eggScore + sectionScore).toFixed(1));
+  const scoreDisplay = parseFloat((walkScore + sleepScore + workoutScore + waterScore + eggScore + rollerScore + squatScore + sectionScore).toFixed(1));
 
   const toggle = (itemId) => {
     const item = ALL_ITEMS.find(i => i.id === itemId);
@@ -190,8 +198,10 @@ export default function App() {
     const wo = workoutDone[date] ? 2 : 0;
     const water = d["Water 2L 💧"] ? 0.5 : 0;
     const egg = d["Egg 🥚"] ? 0.5 : 0;
+    const roller = d["Roller x100 🛞"] ? 1 : 0;
+    const squat = d["Squat x100 🦵"] ? 1 : 0;
     const sec = ALL_ITEMS.reduce((sum, item) => sum + (d[item.id] ? (item.score || 1) : 0), 0);
-    return w + sl + wo + water + egg + sec;
+    return w + sl + wo + water + egg + roller + squat + sec;
   };
 
   const addSet = (exercise) => {
@@ -283,6 +293,8 @@ export default function App() {
         "Post Real ✅": { checkbox: !!dayChecks["Post Real ✅"] },
         "Water 2L 💧": { checkbox: !!dayChecks["Water 2L 💧"] },
         "Egg 🥚": { checkbox: !!dayChecks["Egg 🥚"] },
+        "Roller x100 🛞": { checkbox: !!dayChecks["Roller x100 🛞"] },
+        "Squat x100 🦵": { checkbox: !!dayChecks["Squat x100 🦵"] },
         "Walk 8k 👟": { checkbox: steps ? parseInt(steps) >= WALK_TARGET : false },
         "Sleep 6h 😴": { checkbox: sleep ? parseFloat(sleep) >= 6 : false },
         "Workout 💪": { checkbox: isWorkoutToday },
@@ -591,7 +603,7 @@ export default function App() {
       <div style={{ marginBottom: 12, background: "#17171f", borderRadius: 16, border: "1px solid #2a2a36", padding: "14px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 16 }}>🔥</span><span style={{ fontSize: 14, fontWeight: 700, color: "#ff6b35" }}>Move</span></div>
-          <span style={{ fontSize: 11, color: "#6b6b80" }}>{(walkScore + sleepScore + workoutScore).toFixed(1)} / 3 คะแนน</span>
+          <span style={{ fontSize: 11, color: "#6b6b80" }}>{(walkScore + sleepScore + workoutScore + rollerScore + squatScore).toFixed(1)} / 5 คะแนน</span>
         </div>
         <div style={{ height: 1, background: "#2a2a36", marginBottom: 12 }} />
         <div style={{ marginBottom: 12 }}>
@@ -623,6 +635,18 @@ export default function App() {
           <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: isWorkoutToday ? "#ff6b35" : "transparent", border: `2px solid ${isWorkoutToday ? "#ff6b35" : "#2a2a36"}`, color: isWorkoutToday ? "#fff" : "transparent", transition: "all 0.2s" }}>✓</div>
           <span style={{ fontSize: 14, color: isWorkoutToday ? "#6b6b80" : "#f0f0f5", textDecoration: isWorkoutToday ? "line-through" : "none" }}>💪 ออกกำลังกายวันนี้ (+2)</span>
           {isWorkoutToday && <button onClick={e => { e.stopPropagation(); setPage("workout"); }} style={{ marginLeft: "auto", background: "#ff6b35", border: "none", borderRadius: 6, padding: "4px 10px", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>บันทึก →</button>}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          {MOVE_EXTRA_ITEMS.map(item => {
+            const checked = !!dayChecks[item.id];
+            return (
+              <div key={item.id} onClick={() => { setChecks(prev => ({ ...prev, [selected]: { ...prev[selected], [item.id]: !prev[selected]?.[item.id] } })); setStatus(null); }}
+                style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, border: `1px solid ${checked ? "transparent" : "#2a2a36"}`, background: checked ? "rgba(255,107,53,0.08)" : "#0e0e12", transition: "all 0.2s", userSelect: "none" }}>
+                <div style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, background: checked ? "#ff6b35" : "transparent", border: `2px solid ${checked ? "#ff6b35" : "#2a2a36"}`, color: checked ? "#fff" : "transparent", transition: "all 0.2s" }}>✓</div>
+                <span style={{ fontSize: 14, color: checked ? "#6b6b80" : "#f0f0f5", textDecoration: checked ? "line-through" : "none" }}>{item.label} (+1)</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
